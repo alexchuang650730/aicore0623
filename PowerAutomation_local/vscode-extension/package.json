@@ -1,61 +1,144 @@
 {
-  "name": "powerautomation-local",
-  "displayName": "PowerAutomation Local",
-  "description": "PowerAutomation Local MCP Extension",
-  "version": "1.0.0",
+  "name": "powerautomation-local-mcp",
+  "displayName": "PowerAutomation v3.0.0",
+  "description": "PowerAutomation v3.0.0 - Advanced AI Automation Platform with MCP Adapter",
+  "version": "3.0.0",
+  "publisher": "powerautomation",
   "engines": {
-    "vscode": "^1.60.0"
+    "vscode": "^1.74.0"
   },
-  "categories": ["Other"],
-  "activationEvents": ["*"],
+  "categories": [
+    "Other",
+    "Machine Learning",
+    "Data Science"
+  ],
+  "keywords": [
+    "powerautomation",
+    "mcp",
+    "ai",
+    "automation",
+    "manus"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "powerautomation.login",
-        "title": "Login to Manus",
+        "command": "powerautomation.openDashboard",
+        "title": "Open PowerAutomation Dashboard",
         "category": "PowerAutomation"
       },
       {
-        "command": "powerautomation.sendMessage",
-        "title": "Send Message",
+        "command": "powerautomation.toggleMode",
+        "title": "Toggle Layout Mode",
         "category": "PowerAutomation"
       },
       {
-        "command": "powerautomation.getConversations",
-        "title": "Get Conversations",
+        "command": "powerautomation.startMCPServer",
+        "title": "Start MCP Server",
         "category": "PowerAutomation"
       },
       {
-        "command": "powerautomation.getTasks",
-        "title": "Get Tasks",
+        "command": "powerautomation.stopMCPServer",
+        "title": "Stop MCP Server",
         "category": "PowerAutomation"
       },
       {
-        "command": "powerautomation.runTest",
-        "title": "Run Test",
-        "category": "PowerAutomation"
-      },
-      {
-        "command": "powerautomation.viewStatus",
-        "title": "View Status",
+        "command": "powerautomation.runTests",
+        "title": "Run Manus Tests",
         "category": "PowerAutomation"
       }
     ],
+    "views": {
+      "powerautomation-sidebar": [
+        {
+          "id": "powerautomation.dashboard",
+          "name": "Dashboard",
+          "when": "powerautomation.enabled"
+        },
+        {
+          "id": "powerautomation.chat",
+          "name": "AI Assistant",
+          "when": "powerautomation.enabled && !powerautomation.minimalMode"
+        },
+        {
+          "id": "powerautomation.repository",
+          "name": "Repository Explorer",
+          "when": "powerautomation.enabled && !powerautomation.minimalMode"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "powerautomation-sidebar",
+          "title": "PowerAutomation",
+          "icon": "$(robot)"
+        }
+      ]
+    },
     "configuration": {
       "title": "PowerAutomation",
       "properties": {
-        "powerautomation.serverUrl": {
-          "type": "string",
-          "default": "http://localhost:5000",
-          "description": "PowerAutomation Server URL"
-        },
-        "powerautomation.autoStart": {
+        "powerautomation.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Auto start PowerAutomation"
+          "description": "Enable PowerAutomation extension"
+        },
+        "powerautomation.minimalMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use minimal mode when other smart editors are detected"
+        },
+        "powerautomation.autoDetectEditors": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically detect other smart editors and switch to minimal mode"
+        },
+        "powerautomation.mcpServer.port": {
+          "type": "number",
+          "default": 8080,
+          "description": "MCP Server port"
+        },
+        "powerautomation.mcpServer.host": {
+          "type": "string",
+          "default": "localhost",
+          "description": "MCP Server host"
         }
       }
+    },
+    "keybindings": [
+      {
+        "command": "powerautomation.openDashboard",
+        "key": "ctrl+alt+p",
+        "mac": "cmd+alt+p"
+      },
+      {
+        "command": "powerautomation.toggleMode",
+        "key": "ctrl+alt+m",
+        "mac": "cmd+alt+m"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "powerautomation.toggleMode",
+          "when": "view == powerautomation.dashboard",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "powerautomation.openDashboard",
+          "when": "powerautomation.enabled"
+        },
+        {
+          "command": "powerautomation.toggleMode",
+          "when": "powerautomation.enabled"
+        }
+      ]
     }
   },
   "scripts": {
@@ -64,8 +147,13 @@
     "watch": "tsc -watch -p ./"
   },
   "devDependencies": {
-    "@types/vscode": "^1.60.0",
-    "@types/node": "14.x",
-    "typescript": "^4.4.4"
+    "@types/vscode": "^1.74.0",
+    "@types/node": "16.x",
+    "typescript": "^4.9.4"
+  },
+  "dependencies": {
+    "ws": "^8.13.0",
+    "axios": "^1.4.0"
   }
 }
+

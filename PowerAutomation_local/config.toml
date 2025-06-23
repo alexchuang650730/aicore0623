@@ -1,5 +1,7 @@
-# PowerAutomation Local MCP 配置文件
-# 基於TOML格式的統一配置管理
+# PowerAutomation Local MCP Adapter v3.0.0 配置文件
+# 新一代AI驅動自動化平台 - 基於TOML格式的統一配置管理
+# Version: 3.0.0
+# Date: 2025-06-23
 
 [server]
 # Local Server組件配置

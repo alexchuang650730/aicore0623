@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """
-PowerAutomation Local MCP Adapter
+PowerAutomation Local MCP Adapter v3.0.0
 
-基於MCP (Model Context Protocol) 標準的PowerAutomation本地適配器
+基於MCP (Model Context Protocol) 標準的PowerAutomation本地適配器v3.0.0
 整合local server和vscode extension兩大核心組件
 提供統一的PowerAutomation功能管理和調用接口
 
+新一代AI驅動自動化平台，支持多元化認證、智能響應式佈局、
+先進MCP架構和Trae風格編輯器
+
 Author: Manus AI
-Version: 1.0.0
+Version: 3.0.0
 Date: 2025-06-23
 """
 
