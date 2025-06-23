@@ -4,23 +4,24 @@
   "description": "PowerAutomation v3.0.0 - Advanced AI Automation Platform with MCP Adapter",
   "version": "3.0.0",
   "publisher": "powerautomation",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alexchuang650730/aicore0623.git"
+  },
   "engines": {
-    "vscode": "^1.101.0"
+    "vscode": "^1.60.0"
   },
   "categories": [
     "Other",
     "Machine Learning",
-    "Data Science",
-    "Testing"
+    "Data Science"
   ],
   "keywords": [
-    "automation",
-    "ai",
-    "mcp",
     "powerautomation",
-    "smartinvention",
-    "testing",
-    "browser automation"
+    "mcp",
+    "ai",
+    "automation",
+    "manus"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -29,140 +30,183 @@
   "contributes": {
     "commands": [
       {
-        "command": "powerautomation.showDashboard",
-        "title": "Show Dashboard",
-        "category": "PowerAutomation",
-        "icon": "$(dashboard)"
-      },
-      {
         "command": "powerautomation.connectMCP",
         "title": "Connect to MCP Service",
-        "category": "PowerAutomation",
-        "icon": "$(plug)"
+        "category": "PowerAutomation"
       },
       {
         "command": "powerautomation.disconnectMCP",
         "title": "Disconnect from MCP Service",
-        "category": "PowerAutomation",
-        "icon": "$(debug-disconnect)"
+        "category": "PowerAutomation"
       },
       {
-        "command": "powerautomation.showOutput",
-        "title": "Show Output",
-        "category": "PowerAutomation",
-        "icon": "$(output)"
+        "command": "powerautomation.showDashboard",
+        "title": "Show Dashboard",
+        "category": "PowerAutomation"
       },
       {
-        "command": "powerautomation.generateApiKey",
+        "command": "powerautomation.generateAPIKey",
         "title": "Generate API Key",
-        "category": "PowerAutomation",
-        "icon": "$(key)"
+        "category": "PowerAutomation"
       },
       {
         "command": "powerautomation.testConnection",
         "title": "Test MCP Connection",
-        "category": "PowerAutomation",
-        "icon": "$(pulse)"
+        "category": "PowerAutomation"
+      },
+      {
+        "command": "powerautomation.showOutput",
+        "title": "Show Output",
+        "category": "PowerAutomation"
+      },
+      {
+        "command": "powerautomation.openDashboard",
+        "title": "Open PowerAutomation Dashboard",
+        "category": "PowerAutomation"
+      },
+      {
+        "command": "powerautomation.toggleMode",
+        "title": "Toggle Layout Mode",
+        "category": "PowerAutomation"
+      },
+      {
+        "command": "powerautomation.startMCPServer",
+        "title": "Start MCP Server",
+        "category": "PowerAutomation"
+      },
+      {
+        "command": "powerautomation.stopMCPServer",
+        "title": "Stop MCP Server",
+        "category": "PowerAutomation"
+      },
+      {
+        "command": "powerautomation.runTests",
+        "title": "Run Manus Tests",
+        "category": "PowerAutomation"
       }
     ],
     "views": {
-      "explorer": [
+      "powerautomation-sidebar": [
         {
-          "type": "webview",
-          "id": "powerautomation.chatView",
-          "name": "AI Chat",
-          "when": "true"
+          "id": "powerautomation.dashboard",
+          "name": "Dashboard",
+          "when": "powerautomation.enabled"
+        },
+        {
+          "id": "powerautomation.chat",
+          "name": "AI Assistant",
+          "when": "powerautomation.enabled && !powerautomation.minimalMode"
+        },
+        {
+          "id": "powerautomation.repository",
+          "name": "Repository Explorer",
+          "when": "powerautomation.enabled && !powerautomation.minimalMode"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "powerautomation-sidebar",
+          "title": "PowerAutomation",
+          "icon": "$(robot)"
         }
       ]
     },
     "configuration": {
       "title": "PowerAutomation",
       "properties": {
+        "powerautomation.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable PowerAutomation extension"
+        },
+        "powerautomation.minimalMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use minimal mode when other smart editors are detected"
+        },
+        "powerautomation.autoDetectEditors": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically detect other smart editors and switch to minimal mode"
+        },
         "powerautomation.mcpEndpoint": {
           "type": "string",
           "default": "http://localhost:8080/mcp/v3",
-          "description": "MCP服務端點URL",
-          "examples": [
-            "http://localhost:8080/mcp/v3",
-            "https://api.mcp-protocol.org/v3",
-            "https://api.openai.com/v1/chat/completions"
-          ]
+          "description": "MCP Service endpoint URL"
         },
         "powerautomation.apiKey": {
           "type": "string",
           "default": "",
-          "description": "API密鑰 (格式: pa_v3_...)",
-          "pattern": "^pa_v3_.*"
-        },
-        "powerautomation.autoConnect": {
-          "type": "boolean",
-          "default": true,
-          "description": "啟動時自動連接MCP服務"
+          "description": "API Key for MCP Service authentication"
         },
         "powerautomation.enableHeartbeat": {
           "type": "boolean",
           "default": true,
-          "description": "啟用心跳檢測"
+          "description": "Enable heartbeat to maintain connection with MCP service"
         },
         "powerautomation.heartbeatInterval": {
           "type": "number",
           "default": 30,
-          "description": "心跳間隔（秒）",
-          "minimum": 10,
-          "maximum": 300
+          "description": "Heartbeat interval in seconds"
         },
         "powerautomation.timeout": {
           "type": "number",
           "default": 30000,
-          "description": "請求超時時間（毫秒）",
-          "minimum": 5000,
-          "maximum": 120000
+          "description": "Request timeout in milliseconds"
         },
         "powerautomation.retryCount": {
           "type": "number",
           "default": 3,
-          "description": "重試次數",
-          "minimum": 0,
-          "maximum": 10
+          "description": "Number of retry attempts for failed requests"
         },
         "powerautomation.logLevel": {
           "type": "string",
-          "default": "info",
           "enum": ["debug", "info", "warn", "error"],
-          "description": "日誌級別"
+          "default": "info",
+          "description": "Log level for output"
         },
-        "powerautomation.enableSSL": {
-          "type": "boolean",
-          "default": true,
-          "description": "啟用SSL驗證"
+        "powerautomation.mcpServer.port": {
+          "type": "number",
+          "default": 8080,
+          "description": "MCP Server port"
+        },
+        "powerautomation.mcpServer.host": {
+          "type": "string",
+          "default": "localhost",
+          "description": "MCP Server host"
         }
       }
     },
+    "keybindings": [
+      {
+        "command": "powerautomation.openDashboard",
+        "key": "ctrl+alt+p",
+        "mac": "cmd+alt+p"
+      },
+      {
+        "command": "powerautomation.toggleMode",
+        "key": "ctrl+alt+m",
+        "mac": "cmd+alt+m"
+      }
+    ],
     "menus": {
+      "view/title": [
+        {
+          "command": "powerautomation.toggleMode",
+          "when": "view == powerautomation.dashboard",
+          "group": "navigation"
+        }
+      ],
       "commandPalette": [
         {
-          "command": "powerautomation.showDashboard",
-          "when": "true"
+          "command": "powerautomation.openDashboard",
+          "when": "powerautomation.enabled"
         },
         {
-          "command": "powerautomation.connectMCP",
-          "when": "true"
-        },
-        {
-          "command": "powerautomation.disconnectMCP",
-          "when": "true"
-        },
-        {
-          "command": "powerautomation.showOutput",
-          "when": "true"
-        },
-        {
-          "command": "powerautomation.generateApiKey",
-          "when": "true"
-        },
-        {
-          "command": "powerautomation.testConnection",
-          "when": "true"
+          "command": "powerautomation.toggleMode",
+          "when": "powerautomation.enabled"
         }
       ]
     }
@@ -173,17 +217,13 @@
     "watch": "tsc -watch -p ./"
   },
   "devDependencies": {
-    "@types/vscode": "^1.101.0",
-    "@types/node": "^20.0.0",
-    "typescript": "^5.0.0"
+    "@types/vscode": "^1.60.0",
+    "@types/node": "16.x",
+    "typescript": "^4.9.4"
   },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/alexchuang650730/aicore0623.git"
-  },
-  "bugs": {
-    "url": "https://github.com/alexchuang650730/aicore0623/issues"
-  },
-  "homepage": "https://github.com/alexchuang650730/aicore0623#readme"
+  "dependencies": {
+    "ws": "^8.13.0",
+    "axios": "^1.4.0"
+  }
 }
 
