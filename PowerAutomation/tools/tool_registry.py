@@ -557,6 +557,58 @@ class ToolRegistry:
                         "output_types": ["json", "csv"]
                     }
                 ]
+            },
+            {
+                "id": "smartinvention_adapter_mcp",
+                "name": "Smartinvention_Adapter MCP",
+                "type": "mcp_component",
+                "description": "智能發明適配器MCP組件，整合EC2功能，支持端側local model連接和對話智能分析",
+                "module_path": "components.smartinvention_adapter_mcp",
+                "class_name": "SmartinventionAdapterMCP",
+                "capabilities": [
+                    {
+                        "name": "conversation_processing",
+                        "description": "智能對話處理和分析",
+                        "input_types": ["json", "list"],
+                        "output_types": ["json"],
+                        "parameters": {
+                            "conversations": "array",
+                            "metadata": "object",
+                            "analysis_type": "string"
+                        }
+                    },
+                    {
+                        "name": "local_model_management",
+                        "description": "本地模型連接和管理",
+                        "input_types": ["json"],
+                        "output_types": ["json"],
+                        "parameters": {
+                            "model_name": "string",
+                            "endpoint": "string",
+                            "model_type": "string",
+                            "config": "object"
+                        }
+                    },
+                    {
+                        "name": "data_synchronization",
+                        "description": "數據同步管理",
+                        "input_types": ["json"],
+                        "output_types": ["json"],
+                        "parameters": {
+                            "sync_direction": "string",
+                            "data_type": "string"
+                        }
+                    },
+                    {
+                        "name": "system_management",
+                        "description": "系統管理和監控",
+                        "input_types": ["json"],
+                        "output_types": ["json"],
+                        "parameters": {
+                            "include_details": "boolean"
+                        }
+                    }
+                ]
             }
         ]
         

@@ -367,6 +367,10 @@ class AICore3:
         self.tool_registry = ToolRegistry()
         self.action_executor = ActionExecutor()
         
+        # Smartinvention Adapter MCP
+        from components.smartinvention_adapter_mcp import SmartinventionAdapterMCP
+        self.smartinvention_adapter = None  # 延遲初始化
+        
         # 統計和監控
         self.stage_statistics = {}
         self.expert_usage_stats = {}
@@ -389,6 +393,20 @@ class AICore3:
             
             # 初始化動態專家註冊中心
             await self.dynamic_expert_registry.initialize()
+            
+            # 初始化Smartinvention Adapter MCP
+            if self.smartinvention_adapter is None:
+                from components.smartinvention_adapter_mcp import SmartinventionAdapterMCP
+                smartinvention_config = {
+                    'data_dir': '/tmp/smartinvention_data',
+                    'sync_interval': 30,
+                    'max_retries': 3,
+                    'local_endpoint': 'http://localhost:8000',
+                    'cloud_endpoint': 'http://18.212.97.173:8000'
+                }
+                self.smartinvention_adapter = SmartinventionAdapterMCP(smartinvention_config)
+                await self.smartinvention_adapter.initialize()
+                logger.info("✅ Smartinvention Adapter MCP 初始化完成")
             
             # 初始化統計
             for stage in ProcessingStage:
@@ -1146,4 +1164,203 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+
+    # Smartinvention Adapter API端點處理方法
+    async def handle_smartinvention_request(self, endpoint: str, request_data: Dict) -> Dict:
+        """處理Smartinvention相關請求 - 接手原EC2端口"""
+        try:
+            if self.smartinvention_adapter is None:
+                return {
+                    "success": False,
+                    "error": "Smartinvention Adapter未初始化",
+                    "timestamp": datetime.now().isoformat()
+                }
+            
+            # 根據端點路由到對應的處理方法
+            if endpoint == "/api/sync/conversations":
+                return await self.smartinvention_adapter.process_conversation_sync(request_data)
+            
+            elif endpoint == "/api/conversations/latest":
+                return await self.smartinvention_adapter.get_latest_conversations(request_data)
+            
+            elif endpoint == "/api/interventions/needed":
+                return await self.smartinvention_adapter.get_interventions_needed(request_data)
+            
+            elif endpoint == "/api/health":
+                return await self.smartinvention_adapter.health_check()
+            
+            elif endpoint == "/api/statistics":
+                return await self.smartinvention_adapter.get_statistics()
+            
+            elif endpoint == "/api/local-models/connect":
+                return await self.smartinvention_adapter.connect_local_model(request_data)
+            
+            elif endpoint == "/api/local-models/query":
+                return await self.smartinvention_adapter.query_local_model(request_data)
+            
+            elif endpoint == "/api/local-models/status":
+                return await self.smartinvention_adapter.get_model_status(request_data)
+            
+            elif endpoint == "/api/sync/start":
+                return await self.smartinvention_adapter.start_sync(request_data)
+            
+            elif endpoint == "/api/sync/status":
+                return await self.smartinvention_adapter.get_sync_status(request_data)
+            
+            else:
+                return {
+                    "success": False,
+                    "error": f"未知的Smartinvention端點: {endpoint}",
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+        except Exception as e:
+            logger.error(f"處理Smartinvention請求失敗 {endpoint}: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "endpoint": endpoint,
+                "timestamp": datetime.now().isoformat()
+            }
+    
+    async def handle_unified_request(self, endpoint: str, request_data: Dict) -> Dict:
+        """統一請求處理 - 整合AICore和Smartinvention端點"""
+        from config.endpoint_mapping import is_smartinvention_endpoint, is_aicore_endpoint
+        
+        try:
+            if is_smartinvention_endpoint(endpoint):
+                # 處理Smartinvention相關請求
+                return await self.handle_smartinvention_request(endpoint, request_data)
+            
+            elif is_aicore_endpoint(endpoint):
+                # 處理AICore核心請求
+                return await self.handle_aicore_request(endpoint, request_data)
+            
+            else:
+                return {
+                    "success": False,
+                    "error": f"未知端點: {endpoint}",
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+        except Exception as e:
+            logger.error(f"統一請求處理失敗 {endpoint}: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "endpoint": endpoint,
+                "timestamp": datetime.now().isoformat()
+            }
+    
+    async def handle_aicore_request(self, endpoint: str, request_data: Dict) -> Dict:
+        """處理AICore核心請求"""
+        try:
+            if endpoint == "/api/aicore/process":
+                # 處理核心請求
+                user_request = UserRequest(
+                    id=request_data.get("id", f"req_{int(time.time())}"),
+                    content=request_data.get("content", ""),
+                    context=request_data.get("context", {}),
+                    priority=request_data.get("priority", "normal")
+                )
+                result = await self.process_request(user_request)
+                return {
+                    "success": result.success,
+                    "result": asdict(result),
+                    "timestamp": datetime.now().isoformat()
+                }
+            
+            elif endpoint == "/api/aicore/status":
+                return await self.get_system_status()
+            
+            elif endpoint == "/api/aicore/experts":
+                experts = await self.dynamic_expert_registry.get_all_experts()
+                return {
+                    "success": True,
+                    "experts": [asdict(expert) for expert in experts],
+                    "count": len(experts),
+                    "timestamp": datetime.now().isoformat()
+                }
+            
+            elif endpoint == "/api/aicore/tools":
+                tools = await self.tool_registry.get_all_tools()
+                return {
+                    "success": True,
+                    "tools": [asdict(tool) for tool in tools],
+                    "count": len(tools),
+                    "timestamp": datetime.now().isoformat()
+                }
+            
+            else:
+                return {
+                    "success": False,
+                    "error": f"未知的AICore端點: {endpoint}",
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+        except Exception as e:
+            logger.error(f"處理AICore請求失敗 {endpoint}: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "endpoint": endpoint,
+                "timestamp": datetime.now().isoformat()
+            }
+    
+    async def get_system_status(self) -> Dict:
+        """獲取系統整體狀態"""
+        try:
+            # 獲取各組件狀態
+            smartinvention_health = await self.smartinvention_adapter.health_check() if self.smartinvention_adapter else {"healthy": False}
+            
+            # 獲取專家和工具統計
+            experts = await self.dynamic_expert_registry.get_all_experts()
+            tools = await self.tool_registry.get_all_tools()
+            
+            return {
+                "success": True,
+                "system_status": {
+                    "aicore_version": "3.0.0",
+                    "components": {
+                        "dynamic_expert_registry": True,
+                        "tool_registry": True,
+                        "smartinvention_adapter": smartinvention_health.get("healthy", False),
+                        "general_processor": True,
+                        "expert_aggregator": True
+                    },
+                    "statistics": {
+                        "total_experts": len(experts),
+                        "total_tools": len(tools),
+                        "total_requests": self.performance_metrics["total_requests"],
+                        "successful_requests": self.performance_metrics["successful_requests"],
+                        "average_response_time": self.performance_metrics["average_response_time"]
+                    },
+                    "smartinvention_status": smartinvention_health
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"獲取系統狀態失敗: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+
+# 創建AICore 3.0實例的工廠函數
+def create_aicore3() -> AICore3:
+    """創建AICore 3.0實例"""
+    return AICore3()
+
+# 導出主要類和函數
+__all__ = [
+    "AICore3",
+    "UserRequest", 
+    "ExpertResponse",
+    "ProcessingResult",
+    "ProcessingStage",
+    "create_aicore3"
+]
 
