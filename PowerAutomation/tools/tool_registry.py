@@ -559,6 +559,57 @@ class ToolRegistry:
                 ]
             },
             {
+                "id": "local_mcp_adapter",
+                "name": "Local MCP Adapter",
+                "type": "mcp_component",
+                "description": "端側MCP適配器，提供工具註冊、心跳管理和智慧路由功能",
+                "module_path": "components.local_mcp_adapter",
+                "class_name": "LocalMCPAdapter",
+                "capabilities": [
+                    {
+                        "name": "tool_registration",
+                        "description": "向中央註冊中心註冊本地工具",
+                        "input_types": ["json"],
+                        "output_types": ["json"],
+                        "parameters": {
+                            "tool_info": "dict",
+                            "capabilities": "list",
+                            "endpoint": "string"
+                        }
+                    },
+                    {
+                        "name": "heartbeat_management",
+                        "description": "維持與雲端的連接狀態",
+                        "input_types": ["json"],
+                        "output_types": ["json"],
+                        "parameters": {
+                            "interval": "int",
+                            "timeout": "int"
+                        }
+                    },
+                    {
+                        "name": "smart_routing",
+                        "description": "根據負載和可用性進行智能路由",
+                        "input_types": ["json"],
+                        "output_types": ["json"],
+                        "parameters": {
+                            "capability": "string",
+                            "priority": "string",
+                            "timeout": "float"
+                        }
+                    },
+                    {
+                        "name": "load_monitoring",
+                        "description": "監控系統負載和性能指標",
+                        "input_types": ["json"],
+                        "output_types": ["json"],
+                        "parameters": {
+                            "metrics_type": "string"
+                        }
+                    }
+                ]
+            },
+            {
                 "id": "smartinvention_adapter_mcp",
                 "name": "Smartinvention_Adapter MCP",
                 "type": "mcp_component",
