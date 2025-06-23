@@ -1,8 +1,7 @@
-#!/usr/bin/env python3
 """
-统一智能工具引擎MCP适配器 - 完善版
-整合ACI.dev、MCP.so、Zapier三个云端平台的统一工具引擎
-同时整合发布发现功能
+Smart Tool Engine MCP - 完整版
+整合ACI.dev、MCP.so、Zapier三個雲端平台的統一智能工具引擎
+支持智能路由、成本優化、性能監控
 """
 
 import json
@@ -11,74 +10,112 @@ import asyncio
 import time
 import os
 import requests
+import aiohttp
 from typing import Dict, List, Any, Optional, Union
 from pathlib import Path
 import sys
 from datetime import datetime
+from enum import Enum
 
-# 添加项目路径
+# 添加項目路徑
 sys.path.append(str(Path(__file__).parent.parent.parent))
-
-from mcptool.core.base_mcp import BaseMCP
 
 logger = logging.getLogger(__name__)
 
+class PlatformType(Enum):
+    """支持的雲端平台類型"""
+    ACI_DEV = "aci_dev"
+    MCP_SO = "mcp_so"
+    ZAPIER = "zapier"
+    LOCAL = "local"
+
+class CostType(Enum):
+    """成本類型"""
+    FREE = "free"
+    FREEMIUM = "freemium"
+    PAID = "paid"
+    SUBSCRIPTION = "subscription"
+
 class UnifiedToolRegistry:
-    """统一工具注册表"""
+    """統一工具註冊表"""
     
     def __init__(self):
         self.tools_db = {}
         self.platform_clients = {}
         self.last_sync_time = None
+        self.cost_tracker = CostTracker()
         
     def register_tool(self, tool_info: Dict) -> str:
-        """注册工具到统一注册表"""
+        """註冊工具到統一註冊表"""
         tool_id = f"{tool_info['platform']}:{tool_info['name']}"
         
         unified_tool = {
-            # 基础信息
+            # 基礎信息
             "id": tool_id,
             "name": tool_info["name"],
             "description": tool_info["description"],
             "category": tool_info["category"],
             "version": tool_info.get("version", "1.0.0"),
+            "tags": tool_info.get("tags", []),
             
             # 平台信息
             "platform": tool_info["platform"],
             "platform_tool_id": tool_info["platform_tool_id"],
             "mcp_endpoint": tool_info["mcp_endpoint"],
+            "api_endpoint": tool_info.get("api_endpoint"),
             
             # 功能特性
             "capabilities": tool_info["capabilities"],
             "input_schema": tool_info["input_schema"],
             "output_schema": tool_info["output_schema"],
+            "supported_formats": tool_info.get("supported_formats", []),
             
-            # 性能指标
+            # 性能指標
             "performance_metrics": {
                 "avg_response_time": tool_info.get("avg_response_time", 1000),
                 "success_rate": tool_info.get("success_rate", 0.95),
                 "throughput": tool_info.get("throughput", 100),
-                "reliability_score": tool_info.get("reliability_score", 0.9)
+                "reliability_score": tool_info.get("reliability_score", 0.9),
+                "uptime": tool_info.get("uptime", 0.99)
             },
             
             # 成本信息
             "cost_model": {
                 "type": tool_info.get("cost_type", "free"),
                 "cost_per_call": tool_info.get("cost_per_call", 0.0),
+                "cost_per_mb": tool_info.get("cost_per_mb", 0.0),
                 "monthly_limit": tool_info.get("monthly_limit", -1),
-                "currency": tool_info.get("currency", "USD")
+                "daily_limit": tool_info.get("daily_limit", -1),
+                "currency": tool_info.get("currency", "USD"),
+                "billing_model": tool_info.get("billing_model", "per_call")
             },
             
-            # 质量评分
+            # 質量評分
             "quality_scores": {
                 "user_rating": tool_info.get("user_rating", 4.0),
                 "documentation_quality": tool_info.get("doc_quality", 0.8),
                 "community_support": tool_info.get("community_support", 0.7),
-                "update_frequency": tool_info.get("update_frequency", 0.8)
-            }
+                "update_frequency": tool_info.get("update_frequency", 0.8),
+                "security_score": tool_info.get("security_score", 0.9)
+            },
+            
+            # 使用統計
+            "usage_stats": {
+                "total_calls": 0,
+                "successful_calls": 0,
+                "failed_calls": 0,
+                "total_cost": 0.0,
+                "last_used": None,
+                "avg_user_satisfaction": 0.0
+            },
+            
+            # 註冊時間
+            "registered_at": datetime.now().isoformat(),
+            "last_updated": datetime.now().isoformat()
         }
         
         self.tools_db[tool_id] = unified_tool
+        logger.info(f"Registered tool: {tool_id}")
         return tool_id
     
     def search_tools(self, query: str, filters: Dict = None) -> List[Dict]:
@@ -90,7 +127,7 @@ class UnifiedToolRegistry:
         for tool_id, tool in self.tools_db.items():
             score = 0.0
             
-            # 名称匹配
+            # 名稱匹配
             if query_lower in tool["name"].lower():
                 score += 0.4
             
@@ -98,897 +135,749 @@ class UnifiedToolRegistry:
             if query_lower in tool["description"].lower():
                 score += 0.3
             
-            # 类别匹配
-            if query_lower in tool["category"].lower():
-                score += 0.2
+            # 標籤匹配
+            for tag in tool.get("tags", []):
+                if query_lower in tag.lower():
+                    score += 0.2
             
             # 能力匹配
             for capability in tool["capabilities"]:
                 if query_lower in capability.lower():
-                    score += 0.1
-                    break
+                    score += 0.3
             
-            # 应用过滤器
-            if self._apply_filters(tool, filters) and score > 0:
-                tool_copy = tool.copy()
-                tool_copy["relevance_score"] = score
-                matches.append(tool_copy)
+            # 應用過濾器
+            if self._apply_filters(tool, filters):
+                matches.append({
+                    "tool": tool,
+                    "relevance_score": score
+                })
         
-        return sorted(matches, key=lambda x: x["relevance_score"], reverse=True)
+        # 按相關性排序
+        matches.sort(key=lambda x: x["relevance_score"], reverse=True)
+        return [match["tool"] for match in matches]
     
     def _apply_filters(self, tool: Dict, filters: Dict) -> bool:
-        """应用过滤器"""
-        if "platforms" in filters and tool["platform"] not in filters["platforms"]:
-            return False
+        """應用搜索過濾器"""
+        # 平台過濾
+        if "platforms" in filters:
+            if tool["platform"] not in filters["platforms"]:
+                return False
         
-        if "categories" in filters and tool["category"] not in filters["categories"]:
-            return False
+        # 成本類型過濾
+        if "cost_type" in filters:
+            if tool["cost_model"]["type"] != filters["cost_type"]:
+                return False
         
+        # 最大成本過濾
         if "max_cost" in filters:
             if tool["cost_model"]["cost_per_call"] > filters["max_cost"]:
                 return False
         
+        # 最小評分過濾
+        if "min_rating" in filters:
+            if tool["quality_scores"]["user_rating"] < filters["min_rating"]:
+                return False
+        
+        # 性能要求過濾
         if "min_success_rate" in filters:
             if tool["performance_metrics"]["success_rate"] < filters["min_success_rate"]:
                 return False
         
         return True
+    
+    def get_tool_by_id(self, tool_id: str) -> Optional[Dict]:
+        """根據ID獲取工具"""
+        return self.tools_db.get(tool_id)
+    
+    def update_tool_stats(self, tool_id: str, execution_result: Dict):
+        """更新工具使用統計"""
+        if tool_id not in self.tools_db:
+            return
+        
+        tool = self.tools_db[tool_id]
+        stats = tool["usage_stats"]
+        
+        stats["total_calls"] += 1
+        stats["last_used"] = datetime.now().isoformat()
+        
+        if execution_result.get("success", False):
+            stats["successful_calls"] += 1
+        else:
+            stats["failed_calls"] += 1
+        
+        # 更新成本
+        cost = execution_result.get("cost", 0.0)
+        stats["total_cost"] += cost
+        self.cost_tracker.add_cost(tool_id, cost)
+        
+        # 更新性能指標
+        response_time = execution_result.get("response_time", 0)
+        if response_time > 0:
+            current_avg = tool["performance_metrics"]["avg_response_time"]
+            total_calls = stats["total_calls"]
+            new_avg = ((current_avg * (total_calls - 1)) + response_time) / total_calls
+            tool["performance_metrics"]["avg_response_time"] = new_avg
+        
+        # 更新成功率
+        success_rate = stats["successful_calls"] / stats["total_calls"]
+        tool["performance_metrics"]["success_rate"] = success_rate
+
+class CostTracker:
+    """成本追蹤器"""
+    
+    def __init__(self):
+        self.daily_costs = {}
+        self.monthly_costs = {}
+        self.tool_costs = {}
+        
+    def add_cost(self, tool_id: str, cost: float):
+        """添加成本記錄"""
+        today = datetime.now().strftime("%Y-%m-%d")
+        month = datetime.now().strftime("%Y-%m")
+        
+        # 日成本
+        if today not in self.daily_costs:
+            self.daily_costs[today] = 0.0
+        self.daily_costs[today] += cost
+        
+        # 月成本
+        if month not in self.monthly_costs:
+            self.monthly_costs[month] = 0.0
+        self.monthly_costs[month] += cost
+        
+        # 工具成本
+        if tool_id not in self.tool_costs:
+            self.tool_costs[tool_id] = 0.0
+        self.tool_costs[tool_id] += cost
+    
+    def get_monthly_cost(self, month: str = None) -> float:
+        """獲取月度成本"""
+        if month is None:
+            month = datetime.now().strftime("%Y-%m")
+        return self.monthly_costs.get(month, 0.0)
+    
+    def check_budget(self, monthly_budget: float) -> Dict:
+        """檢查預算狀態"""
+        current_month_cost = self.get_monthly_cost()
+        remaining = monthly_budget - current_month_cost
+        usage_percentage = (current_month_cost / monthly_budget) * 100
+        
+        return {
+            "monthly_budget": monthly_budget,
+            "current_cost": current_month_cost,
+            "remaining": remaining,
+            "usage_percentage": usage_percentage,
+            "over_budget": current_month_cost > monthly_budget
+        }
 
 class IntelligentRoutingEngine:
-    """智能路由决策引擎"""
+    """智能路由引擎"""
     
     def __init__(self, registry: UnifiedToolRegistry):
         self.registry = registry
-        self.decision_weights = {
+        self.routing_weights = {
             "performance": 0.3,
             "cost": 0.25,
-            "quality": 0.25,
-            "availability": 0.2
+            "reliability": 0.25,
+            "user_rating": 0.2
         }
     
-    def select_optimal_tool(self, user_request: str, context: Dict = None) -> Dict:
-        """选择最优工具"""
+    def select_optimal_tool(self, requirement: str, context: Dict = None) -> Dict:
+        """選擇最優工具"""
         context = context or {}
-        
-        # 工具发现
-        candidate_tools = self.registry.search_tools(
-            user_request, 
-            filters=context.get("filters", {})
-        )
-        
-        if not candidate_tools:
-            return {"success": False, "error": "未找到匹配的工具"}
-        
-        # 多维度评分
-        scored_tools = []
-        for tool in candidate_tools:
-            score = self._calculate_comprehensive_score(tool, context)
-            tool["comprehensive_score"] = score
-            scored_tools.append(tool)
-        
-        # 选择最优工具
-        best_tool = max(scored_tools, key=lambda x: x["comprehensive_score"])
-        
-        return {
-            "success": True,
-            "selected_tool": best_tool,
-            "alternatives": scored_tools[1:4],
-            "decision_explanation": self._generate_decision_explanation(best_tool, context)
-        }
-    
-    def _calculate_comprehensive_score(self, tool: Dict, context: Dict) -> float:
-        """计算综合评分"""
-        performance_score = self._calculate_performance_score(tool)
-        cost_score = self._calculate_cost_score(tool, context)
-        quality_score = self._calculate_quality_score(tool)
-        availability_score = self._calculate_availability_score(tool, context)
-        
-        comprehensive_score = (
-            performance_score * self.decision_weights["performance"] +
-            cost_score * self.decision_weights["cost"] +
-            quality_score * self.decision_weights["quality"] +
-            availability_score * self.decision_weights["availability"]
-        )
-        
-        # 相关性加成
-        relevance_bonus = tool.get("relevance_score", 0) * 0.1
-        
-        return min(comprehensive_score + relevance_bonus, 1.0)
-    
-    def _calculate_performance_score(self, tool: Dict) -> float:
-        """计算性能评分"""
-        metrics = tool["performance_metrics"]
-        
-        response_time_score = max(0, 1 - (metrics["avg_response_time"] / 5000))
-        success_rate_score = metrics["success_rate"]
-        throughput_score = min(metrics["throughput"] / 1000, 1.0)
-        reliability_score = metrics["reliability_score"]
-        
-        return (response_time_score * 0.3 + success_rate_score * 0.3 + 
-                throughput_score * 0.2 + reliability_score * 0.2)
-    
-    def _calculate_cost_score(self, tool: Dict, context: Dict) -> float:
-        """计算成本评分"""
-        cost_model = tool["cost_model"]
-        
-        if cost_model["type"] == "free":
-            return 1.0
-        elif cost_model["type"] == "per_call":
-            max_cost = context.get("budget", {}).get("max_cost_per_call", 0.01)
-            cost_ratio = cost_model["cost_per_call"] / max_cost
-            return max(0, 1 - cost_ratio)
-        else:
-            return 0.8
-    
-    def _calculate_quality_score(self, tool: Dict) -> float:
-        """计算质量评分"""
-        quality = tool["quality_scores"]
-        
-        user_rating_score = (quality["user_rating"] - 1) / 4
-        doc_quality_score = quality["documentation_quality"]
-        community_score = quality["community_support"]
-        update_score = quality["update_frequency"]
-        
-        return (user_rating_score * 0.4 + doc_quality_score * 0.2 + 
-                community_score * 0.2 + update_score * 0.2)
-    
-    def _calculate_availability_score(self, tool: Dict, context: Dict) -> float:
-        """计算可用性评分"""
-        # 简化的可用性评分
-        return 0.9
-    
-    def _generate_decision_explanation(self, tool: Dict, context: Dict) -> Dict:
-        """生成决策解释"""
-        return {
-            "selected_tool": {
-                "name": tool["name"],
-                "platform": tool["platform"],
-                "score": tool["comprehensive_score"]
-            },
-            "key_factors": {
-                "performance": self._calculate_performance_score(tool),
-                "cost": self._calculate_cost_score(tool, context),
-                "quality": self._calculate_quality_score(tool)
-            }
-        }
-
-class MCPUnifiedExecutionEngine:
-    """MCP统一执行引擎"""
-    
-    def __init__(self, registry: UnifiedToolRegistry):
-        self.registry = registry
-        self.routing_engine = IntelligentRoutingEngine(registry)
-        
-        # 执行统计
-        self.execution_stats = {
-            "total_executions": 0,
-            "platform_usage": {"aci.dev": 0, "mcp.so": 0, "zapier": 0},
-            "success_rate": 0.0,
-            "avg_execution_time": 0.0
-        }
-    
-    async def execute_user_request(self, user_request: str, context: Dict = None) -> Dict:
-        """执行用户请求"""
-        context = context or {}
-        execution_id = f"exec_{int(time.time())}"
         
         try:
-            # 智能路由选择工具
-            routing_result = self.routing_engine.select_optimal_tool(user_request, context)
+            # 搜索候選工具
+            candidates = self.registry.search_tools(requirement, context.get("filters", {}))
             
-            if not routing_result["success"]:
-                return routing_result
+            if not candidates:
+                return {
+                    "success": False,
+                    "error": "No suitable tools found",
+                    "candidates": []
+                }
             
-            selected_tool = routing_result["selected_tool"]
+            # 評分和排序
+            scored_tools = []
+            for tool in candidates:
+                score = self._calculate_tool_score(tool, context)
+                scored_tools.append({
+                    "tool": tool,
+                    "score": score,
+                    "reasoning": self._generate_reasoning(tool, score, context)
+                })
             
-            # 准备执行参数
-            execution_params = self._prepare_execution_params(user_request, selected_tool, context)
+            # 按分數排序
+            scored_tools.sort(key=lambda x: x["score"], reverse=True)
             
-            # 模拟MCP执行
-            execution_result = await self._simulate_mcp_execution(
-                selected_tool, execution_params, execution_id
-            )
+            # 檢查預算約束
+            budget = context.get("budget", {})
+            if budget:
+                scored_tools = self._filter_by_budget(scored_tools, budget)
             
-            # 更新统计信息
-            self._update_execution_stats(selected_tool, execution_result)
+            if not scored_tools:
+                return {
+                    "success": False,
+                    "error": "No tools within budget constraints",
+                    "candidates": []
+                }
+            
+            best_tool = scored_tools[0]
             
             return {
                 "success": True,
-                "execution_id": execution_id,
-                "selected_tool": {
-                    "name": selected_tool["name"],
-                    "platform": selected_tool["platform"],
-                    "confidence_score": selected_tool["comprehensive_score"]
-                },
-                "execution_result": execution_result,
-                "routing_info": routing_result["decision_explanation"],
-                "alternatives": routing_result["alternatives"]
+                "selected_tool": best_tool["tool"],
+                "confidence": best_tool["score"],
+                "reasoning": best_tool["reasoning"],
+                "alternatives": [t["tool"] for t in scored_tools[1:5]],  # 前5個備選
+                "total_candidates": len(candidates)
             }
             
         except Exception as e:
-            logger.error(f"执行失败 {execution_id}: {e}")
-            return {
-                "success": False,
-                "execution_id": execution_id,
-                "error": str(e)
-            }
-    
-    def _prepare_execution_params(self, user_request: str, tool: Dict, context: Dict) -> Dict:
-        """准备执行参数"""
-        return {
-            "request": user_request,
-            "context": context,
-            "tool_specific_params": self._extract_tool_specific_params(user_request, tool)
-        }
-    
-    def _extract_tool_specific_params(self, request: str, tool: Dict) -> Dict:
-        """提取工具特定参数"""
-        category = tool["category"]
-        
-        if category == "productivity":
-            return {"priority": "normal", "notification": True}
-        elif category == "data_analysis":
-            return {"analysis_type": "basic", "output_format": "json"}
-        elif category == "communication":
-            return {"message_format": "text", "urgent": False}
-        else:
-            return {}
-    
-    async def _simulate_mcp_execution(self, tool: Dict, params: Dict, execution_id: str) -> Dict:
-        """模拟MCP执行"""
-        start_time = time.time()
-        
-        # 模拟执行延迟
-        await asyncio.sleep(0.1)
-        
-        execution_time = time.time() - start_time
-        
-        # 模拟成功执行
-        return {
-            "success": True,
-            "result": f"工具 {tool['name']} 执行完成",
-            "execution_time": execution_time,
-            "platform": tool["platform"],
-            "tool_name": tool["name"],
-            "metadata": {
-                "execution_timestamp": time.time(),
-                "mcp_version": "1.0"
-            }
-        }
-    
-    def _update_execution_stats(self, tool: Dict, result: Dict):
-        """更新执行统计"""
-        self.execution_stats["total_executions"] += 1
-        self.execution_stats["platform_usage"][tool["platform"]] += 1
-        
-        if result.get("success"):
-            current_success = self.execution_stats.get("successful_executions", 0)
-            self.execution_stats["successful_executions"] = current_success + 1
-        
-        total = self.execution_stats["total_executions"]
-        successful = self.execution_stats.get("successful_executions", 0)
-        self.execution_stats["success_rate"] = successful / total if total > 0 else 0
-    
-    def get_execution_statistics(self) -> Dict:
-        """获取执行统计信息"""
-        return {
-            "statistics": self.execution_stats,
-            "platform_distribution": {
-                platform: count / max(self.execution_stats["total_executions"], 1)
-                for platform, count in self.execution_stats["platform_usage"].items()
-            },
-            "registry_info": {
-                "total_tools": len(self.registry.tools_db)
-            }
-        }
-
-class UnifiedSmartToolEngineMCP(BaseMCP):
-    """统一智能工具引擎MCP适配器 - 完善版"""
-    
-    def __init__(self, config: Dict = None):
-        super().__init__()
-        self.config = config or {}
-        
-        # 初始化核心组件
-        self.registry = UnifiedToolRegistry()
-        self.execution_engine = MCPUnifiedExecutionEngine(self.registry)
-        
-        # 初始化示例工具
-        self._initialize_sample_tools()
-        
-        logger.info("统一智能工具引擎MCP适配器初始化完成")
-    
-    def _initialize_sample_tools(self):
-        """初始化示例工具"""
-        sample_tools = [
-            {
-                "name": "google_calendar_integration",
-                "description": "Google Calendar API集成工具",
-                "category": "productivity",
-                "platform": "aci.dev",
-                "platform_tool_id": "google_calendar_v3",
-                "mcp_endpoint": "https://api.aci.dev/mcp/google_calendar",
-                "capabilities": ["schedule", "remind", "sync", "share"],
-                "input_schema": {"type": "object", "properties": {"action": {"type": "string"}}},
-                "output_schema": {"type": "object", "properties": {"result": {"type": "string"}}},
-                "avg_response_time": 200,
-                "success_rate": 0.98,
-                "cost_type": "per_call",
-                "cost_per_call": 0.001,
-                "user_rating": 4.5
-            },
-            {
-                "name": "advanced_data_analyzer",
-                "description": "高级数据分析MCP工具",
-                "category": "data_analysis",
-                "platform": "mcp.so",
-                "platform_tool_id": "data_analyzer_pro",
-                "mcp_endpoint": "https://api.mcp.so/tools/data_analyzer",
-                "capabilities": ["analyze", "visualize", "predict", "export"],
-                "input_schema": {"type": "object", "properties": {"data": {"type": "array"}}},
-                "output_schema": {"type": "object", "properties": {"analysis": {"type": "object"}}},
-                "avg_response_time": 500,
-                "success_rate": 0.96,
-                "cost_type": "subscription",
-                "monthly_limit": 1000,
-                "user_rating": 4.3
-            },
-            {
-                "name": "slack_team_notification",
-                "description": "Slack团队通知自动化",
-                "category": "communication",
-                "platform": "zapier",
-                "platform_tool_id": "slack_webhook_v2",
-                "mcp_endpoint": "https://zapier-mcp-bridge.com/slack_notification",
-                "capabilities": ["message", "channel", "mention", "format"],
-                "input_schema": {"type": "object", "properties": {"message": {"type": "string"}}},
-                "output_schema": {"type": "object", "properties": {"status": {"type": "string"}}},
-                "avg_response_time": 150,
-                "success_rate": 0.99,
-                "cost_type": "free",
-                "user_rating": 4.7
-            }
-        ]
-        
-        for tool in sample_tools:
-            self.registry.register_tool(tool)
-    
-    def get_capabilities(self) -> List[str]:
-        """获取适配器能力"""
-        return [
-            "unified_tool_discovery",
-            "intelligent_routing",
-            "multi_platform_execution",
-            "performance_optimization",
-            "cost_optimization",
-            "quality_assurance"
-        ]
-    
-    def validate_input(self, input_data: Dict[str, Any]) -> bool:
-        """验证输入数据"""
-        if not isinstance(input_data, dict):
-            return False
-        
-        action = input_data.get("action")
-        valid_actions = [
-            "execute_request",
-            "discover_tools",
-            "get_statistics",
-            "register_tool",
-            "health_check"
-        ]
-        
-        return action in valid_actions
-    
-    def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
-        """处理请求"""
-        try:
-            action = input_data.get("action")
-            parameters = input_data.get("parameters", {})
-            
-            if action == "execute_request":
-                return asyncio.run(self._execute_request(parameters))
-            elif action == "discover_tools":
-                return self._discover_tools(parameters)
-            elif action == "get_statistics":
-                return self._get_statistics()
-            elif action == "register_tool":
-                return self._register_tool(parameters)
-            elif action == "health_check":
-                return self._health_check()
-            else:
-                return {
-                    "success": False,
-                    "error": f"不支持的操作: {action}",
-                    "available_actions": [
-                        "execute_request", "discover_tools", "get_statistics",
-                        "register_tool", "health_check"
-                    ]
-                }
-                
-        except Exception as e:
-            logger.error(f"处理请求失败: {e}")
+            logger.error(f"Tool selection failed: {e}")
             return {
                 "success": False,
                 "error": str(e),
-                "action": input_data.get("action")
+                "candidates": []
             }
     
-    async def _execute_request(self, parameters: Dict) -> Dict[str, Any]:
-        """执行用户请求"""
-        user_request = parameters.get("request", "")
-        context = parameters.get("context", {})
+    def _calculate_tool_score(self, tool: Dict, context: Dict) -> float:
+        """計算工具評分"""
+        scores = {}
         
-        if not user_request:
-            return {
-                "success": False,
-                "error": "缺少必需参数: request"
-            }
+        # 性能評分
+        perf_metrics = tool["performance_metrics"]
+        performance_score = (
+            (perf_metrics["success_rate"] * 0.4) +
+            (min(1.0, 2000 / max(perf_metrics["avg_response_time"], 100)) * 0.3) +
+            (perf_metrics["reliability_score"] * 0.3)
+        )
+        scores["performance"] = performance_score
         
-        result = await self.execution_engine.execute_user_request(user_request, context)
-        return result
+        # 成本評分 (成本越低分數越高)
+        cost_per_call = tool["cost_model"]["cost_per_call"]
+        if cost_per_call == 0:
+            cost_score = 1.0  # 免費工具最高分
+        else:
+            # 成本評分反比例，最大成本假設為0.1
+            cost_score = max(0.0, 1.0 - (cost_per_call / 0.1))
+        scores["cost"] = cost_score
+        
+        # 可靠性評分
+        reliability_score = (
+            (perf_metrics["uptime"] * 0.4) +
+            (perf_metrics["reliability_score"] * 0.3) +
+            (tool["quality_scores"]["security_score"] * 0.3)
+        )
+        scores["reliability"] = reliability_score
+        
+        # 用戶評分 (歸一化到0-1)
+        user_rating = tool["quality_scores"]["user_rating"] / 5.0
+        scores["user_rating"] = user_rating
+        
+        # 加權總分
+        total_score = sum(
+            scores[metric] * self.routing_weights[metric]
+            for metric in scores
+        )
+        
+        # 應用上下文調整
+        total_score = self._apply_context_adjustments(total_score, tool, context)
+        
+        return min(1.0, max(0.0, total_score))
     
-    def _discover_tools(self, parameters: Dict) -> Dict[str, Any]:
-        """工具发现"""
+    def _apply_context_adjustments(self, base_score: float, tool: Dict, context: Dict) -> float:
+        """應用上下文調整"""
+        adjusted_score = base_score
+        
+        # 優先級調整
+        priority = context.get("priority", "medium")
+        if priority == "high":
+            # 高優先級任務偏好高性能工具
+            perf_bonus = tool["performance_metrics"]["success_rate"] * 0.1
+            adjusted_score += perf_bonus
+        elif priority == "low":
+            # 低優先級任務偏好低成本工具
+            if tool["cost_model"]["type"] == "free":
+                adjusted_score += 0.1
+        
+        # 數據大小調整
+        data_size = context.get("data_size", "small")
+        if data_size == "large":
+            # 大數據偏好高吞吐量工具
+            throughput_bonus = min(0.1, tool["performance_metrics"]["throughput"] / 1000)
+            adjusted_score += throughput_bonus
+        
+        # 預算敏感度調整
+        budget_priority = context.get("budget_priority", "medium")
+        if budget_priority == "high":
+            # 高預算敏感度大幅提升免費工具分數
+            if tool["cost_model"]["type"] == "free":
+                adjusted_score += 0.15
+        
+        return adjusted_score
+    
+    def _filter_by_budget(self, scored_tools: List[Dict], budget: Dict) -> List[Dict]:
+        """根據預算過濾工具"""
+        max_cost = budget.get("max_cost_per_call", float('inf'))
+        monthly_budget = budget.get("monthly_budget")
+        
+        filtered = []
+        for item in scored_tools:
+            tool = item["tool"]
+            cost_per_call = tool["cost_model"]["cost_per_call"]
+            
+            # 檢查單次調用成本
+            if cost_per_call > max_cost:
+                continue
+            
+            # 檢查月度預算
+            if monthly_budget:
+                current_cost = self.registry.cost_tracker.get_monthly_cost()
+                if current_cost + cost_per_call > monthly_budget:
+                    continue
+            
+            filtered.append(item)
+        
+        return filtered
+    
+    def _generate_reasoning(self, tool: Dict, score: float, context: Dict) -> str:
+        """生成選擇理由"""
+        reasons = []
+        
+        # 性能理由
+        success_rate = tool["performance_metrics"]["success_rate"]
+        if success_rate > 0.95:
+            reasons.append(f"高成功率({success_rate:.1%})")
+        
+        # 成本理由
+        cost_type = tool["cost_model"]["type"]
+        if cost_type == "free":
+            reasons.append("免費使用")
+        elif tool["cost_model"]["cost_per_call"] < 0.01:
+            reasons.append("低成本")
+        
+        # 評分理由
+        user_rating = tool["quality_scores"]["user_rating"]
+        if user_rating > 4.0:
+            reasons.append(f"高用戶評分({user_rating:.1f}/5)")
+        
+        # 平台理由
+        platform = tool["platform"]
+        if platform == "local":
+            reasons.append("本地工具，無網絡依賴")
+        else:
+            reasons.append(f"雲端工具({platform})")
+        
+        reasoning = f"評分: {score:.2f} - " + "、".join(reasons)
+        return reasoning
+
+class CloudPlatformIntegration:
+    """雲端平台整合"""
+    
+    def __init__(self):
+        self.platform_configs = {
+            "aci_dev": {
+                "base_url": "https://api.aci.dev",
+                "api_key": os.getenv("ACI_DEV_API_KEY"),
+                "enabled": bool(os.getenv("ACI_DEV_API_KEY"))
+            },
+            "mcp_so": {
+                "base_url": "https://api.mcp.so",
+                "api_key": os.getenv("MCP_SO_API_KEY"),
+                "enabled": bool(os.getenv("MCP_SO_API_KEY"))
+            },
+            "zapier": {
+                "base_url": "https://api.zapier.com",
+                "api_key": os.getenv("ZAPIER_API_KEY"),
+                "enabled": bool(os.getenv("ZAPIER_API_KEY"))
+            }
+        }
+    
+    async def discover_tools_from_platform(self, platform: str, query: str = "") -> List[Dict]:
+        """從指定平台發現工具"""
+        if platform not in self.platform_configs:
+            return []
+        
+        config = self.platform_configs[platform]
+        if not config["enabled"]:
+            logger.warning(f"Platform {platform} not configured")
+            return []
+        
         try:
-            query = parameters.get("query", "")
-            filters = parameters.get("filters", {})
-            limit = parameters.get("limit", 10)
-            
-            tools = self.registry.search_tools(query, filters)
-            
-            return {
-                "success": True,
-                "tools": tools[:limit],
-                "total_count": len(tools),
-                "search_query": query,
-                "filters_applied": filters
+            if platform == "aci_dev":
+                return await self._discover_aci_dev_tools(query)
+            elif platform == "mcp_so":
+                return await self._discover_mcp_so_tools(query)
+            elif platform == "zapier":
+                return await self._discover_zapier_tools(query)
+        except Exception as e:
+            logger.error(f"Failed to discover tools from {platform}: {e}")
+            return []
+    
+    async def _discover_aci_dev_tools(self, query: str) -> List[Dict]:
+        """發現ACI.dev工具"""
+        # 模擬ACI.dev API調用
+        mock_tools = [
+            {
+                "name": "ai_image_enhancer",
+                "description": "AI驅動的圖像增強工具",
+                "category": "image_processing",
+                "platform": "aci_dev",
+                "platform_tool_id": "aci_img_enhance_001",
+                "mcp_endpoint": "https://api.aci.dev/tools/image-enhancer",
+                "capabilities": ["圖像增強", "AI處理", "批量處理"],
+                "input_schema": {"type": "object", "properties": {"image_url": {"type": "string"}}},
+                "output_schema": {"type": "object", "properties": {"enhanced_url": {"type": "string"}}},
+                "cost_type": "freemium",
+                "cost_per_call": 0.005,
+                "user_rating": 4.5,
+                "avg_response_time": 2000
+            },
+            {
+                "name": "smart_text_analyzer",
+                "description": "智能文本分析和情感檢測",
+                "category": "text_analysis",
+                "platform": "aci_dev",
+                "platform_tool_id": "aci_text_001",
+                "mcp_endpoint": "https://api.aci.dev/tools/text-analyzer",
+                "capabilities": ["文本分析", "情感檢測", "關鍵詞提取"],
+                "input_schema": {"type": "object", "properties": {"text": {"type": "string"}}},
+                "output_schema": {"type": "object", "properties": {"sentiment": {"type": "string"}}},
+                "cost_type": "free",
+                "cost_per_call": 0.0,
+                "user_rating": 4.2,
+                "avg_response_time": 800
             }
+        ]
+        
+        # 根據查詢過濾
+        if query:
+            query_lower = query.lower()
+            mock_tools = [
+                tool for tool in mock_tools
+                if query_lower in tool["name"].lower() or 
+                   query_lower in tool["description"].lower() or
+                   any(query_lower in cap.lower() for cap in tool["capabilities"])
+            ]
+        
+        return mock_tools
+    
+    async def _discover_mcp_so_tools(self, query: str) -> List[Dict]:
+        """發現MCP.so工具"""
+        # 模擬MCP.so API調用
+        mock_tools = [
+            {
+                "name": "data_processor_pro",
+                "description": "專業數據處理MCP組件",
+                "category": "data_processing",
+                "platform": "mcp_so",
+                "platform_tool_id": "mcp_data_pro_001",
+                "mcp_endpoint": "https://api.mcp.so/components/data-processor",
+                "capabilities": ["數據清洗", "格式轉換", "統計分析"],
+                "input_schema": {"type": "object", "properties": {"data": {"type": "array"}}},
+                "output_schema": {"type": "object", "properties": {"processed_data": {"type": "array"}}},
+                "cost_type": "paid",
+                "cost_per_call": 0.02,
+                "user_rating": 4.7,
+                "avg_response_time": 1500
+            },
+            {
+                "name": "workflow_automator",
+                "description": "工作流自動化MCP組件",
+                "category": "automation",
+                "platform": "mcp_so",
+                "platform_tool_id": "mcp_workflow_001",
+                "mcp_endpoint": "https://api.mcp.so/components/workflow",
+                "capabilities": ["工作流設計", "任務調度", "狀態監控"],
+                "input_schema": {"type": "object", "properties": {"workflow": {"type": "object"}}},
+                "output_schema": {"type": "object", "properties": {"execution_id": {"type": "string"}}},
+                "cost_type": "subscription",
+                "cost_per_call": 0.01,
+                "user_rating": 4.4,
+                "avg_response_time": 1200
+            }
+        ]
+        
+        # 根據查詢過濾
+        if query:
+            query_lower = query.lower()
+            mock_tools = [
+                tool for tool in mock_tools
+                if query_lower in tool["name"].lower() or 
+                   query_lower in tool["description"].lower() or
+                   any(query_lower in cap.lower() for cap in tool["capabilities"])
+            ]
+        
+        return mock_tools
+    
+    async def _discover_zapier_tools(self, query: str) -> List[Dict]:
+        """發現Zapier工具"""
+        # 模擬Zapier API調用
+        mock_tools = [
+            {
+                "name": "email_automation",
+                "description": "郵件自動化和管理",
+                "category": "communication",
+                "platform": "zapier",
+                "platform_tool_id": "zap_email_001",
+                "mcp_endpoint": "https://hooks.zapier.com/email-automation",
+                "capabilities": ["郵件發送", "模板管理", "批量處理"],
+                "input_schema": {"type": "object", "properties": {"recipients": {"type": "array"}}},
+                "output_schema": {"type": "object", "properties": {"sent_count": {"type": "number"}}},
+                "cost_type": "freemium",
+                "cost_per_call": 0.001,
+                "user_rating": 4.3,
+                "avg_response_time": 3000
+            },
+            {
+                "name": "crm_integration",
+                "description": "CRM系統整合和同步",
+                "category": "integration",
+                "platform": "zapier",
+                "platform_tool_id": "zap_crm_001",
+                "mcp_endpoint": "https://hooks.zapier.com/crm-sync",
+                "capabilities": ["數據同步", "客戶管理", "報告生成"],
+                "input_schema": {"type": "object", "properties": {"customer_data": {"type": "object"}}},
+                "output_schema": {"type": "object", "properties": {"sync_status": {"type": "string"}}},
+                "cost_type": "paid",
+                "cost_per_call": 0.015,
+                "user_rating": 4.1,
+                "avg_response_time": 2500
+            }
+        ]
+        
+        # 根據查詢過濾
+        if query:
+            query_lower = query.lower()
+            mock_tools = [
+                tool for tool in mock_tools
+                if query_lower in tool["name"].lower() or 
+                   query_lower in tool["description"].lower() or
+                   any(query_lower in cap.lower() for cap in tool["capabilities"])
+            ]
+        
+        return mock_tools
+
+class SmartToolEngineMCP:
+    """Smart Tool Engine MCP主類"""
+    
+    def __init__(self):
+        self.registry = UnifiedToolRegistry()
+        self.routing_engine = IntelligentRoutingEngine(self.registry)
+        self.cloud_integration = CloudPlatformIntegration()
+        self.initialized = False
+        
+    async def initialize(self):
+        """初始化Smart Tool Engine"""
+        if self.initialized:
+            return
+        
+        try:
+            # 註冊本地示例工具
+            await self._register_local_tools()
+            
+            # 發現雲端工具
+            await self._discover_cloud_tools()
+            
+            self.initialized = True
+            logger.info("Smart Tool Engine MCP initialized successfully")
             
         except Exception as e:
-            return {
-                "success": False,
-                "error": str(e)
-            }
+            logger.error(f"Failed to initialize Smart Tool Engine: {e}")
+            raise
     
-    def _get_statistics(self) -> Dict[str, Any]:
-        """获取统计信息"""
-        try:
-            stats = self.execution_engine.get_execution_statistics()
-            return {
-                "success": True,
-                "statistics": stats
+    async def _register_local_tools(self):
+        """註冊本地示例工具"""
+        local_tools = [
+            {
+                "name": "local_file_processor",
+                "description": "本地文件處理工具",
+                "category": "file_processing",
+                "platform": "local",
+                "platform_tool_id": "local_file_001",
+                "mcp_endpoint": "local://file_processor",
+                "capabilities": ["文件讀取", "格式轉換", "批量處理"],
+                "input_schema": {"type": "object", "properties": {"file_path": {"type": "string"}}},
+                "output_schema": {"type": "object", "properties": {"result": {"type": "string"}}},
+                "cost_type": "free",
+                "cost_per_call": 0.0,
+                "user_rating": 4.0,
+                "avg_response_time": 500
+            },
+            {
+                "name": "local_data_analyzer",
+                "description": "本地數據分析工具",
+                "category": "data_analysis",
+                "platform": "local",
+                "platform_tool_id": "local_data_001",
+                "mcp_endpoint": "local://data_analyzer",
+                "capabilities": ["數據分析", "統計計算", "可視化"],
+                "input_schema": {"type": "object", "properties": {"data": {"type": "array"}}},
+                "output_schema": {"type": "object", "properties": {"analysis": {"type": "object"}}},
+                "cost_type": "free",
+                "cost_per_call": 0.0,
+                "user_rating": 4.2,
+                "avg_response_time": 800
             }
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e)
-            }
+        ]
+        
+        for tool in local_tools:
+            self.registry.register_tool(tool)
     
-    def _register_tool(self, parameters: Dict) -> Dict[str, Any]:
-        """注册新工具"""
+    async def _discover_cloud_tools(self):
+        """發現雲端工具"""
+        platforms = ["aci_dev", "mcp_so", "zapier"]
+        
+        for platform in platforms:
+            try:
+                tools = await self.cloud_integration.discover_tools_from_platform(platform)
+                for tool in tools:
+                    self.registry.register_tool(tool)
+                logger.info(f"Discovered {len(tools)} tools from {platform}")
+            except Exception as e:
+                logger.warning(f"Failed to discover tools from {platform}: {e}")
+    
+    async def process(self, request: Dict) -> Dict:
+        """處理請求"""
+        if not self.initialized:
+            await self.initialize()
+        
+        action = request.get("action")
+        parameters = request.get("parameters", {})
+        
         try:
-            tool_info = parameters.get("tool_info", {})
-            
-            if not tool_info:
+            if action == "discover_tools":
+                return await self._handle_discover_tools(parameters)
+            elif action == "select_optimal_tool":
+                return await self._handle_select_optimal_tool(parameters)
+            elif action == "register_tool":
+                return await self._handle_register_tool(parameters)
+            elif action == "get_tool_stats":
+                return await self._handle_get_tool_stats(parameters)
+            elif action == "update_tool_stats":
+                return await self._handle_update_tool_stats(parameters)
+            else:
                 return {
                     "success": False,
-                    "error": "缺少工具信息"
+                    "error": f"Unknown action: {action}"
                 }
-            
-            tool_id = self.registry.register_tool(tool_info)
-            
-            return {
-                "success": True,
-                "tool_id": tool_id,
-                "message": "工具注册成功"
-            }
-            
         except Exception as e:
+            logger.error(f"Error processing request: {e}")
             return {
                 "success": False,
                 "error": str(e)
             }
     
-    def _health_check(self) -> Dict[str, Any]:
-        """健康检查"""
+    async def _handle_discover_tools(self, parameters: Dict) -> Dict:
+        """處理工具發現請求"""
+        query = parameters.get("query", "")
+        filters = parameters.get("filters", {})
+        limit = parameters.get("limit", 50)
+        
+        tools = self.registry.search_tools(query, filters)
+        
+        # 限制返回數量
+        if limit > 0:
+            tools = tools[:limit]
+        
         return {
             "success": True,
-            "status": "healthy",
-            "timestamp": time.time(),
-            "version": "1.0.0",
-            "components": {
-                "registry": "operational",
-                "routing_engine": "operational",
-                "execution_engine": "operational"
-            },
-            "metrics": {
-                "total_tools": len(self.registry.tools_db),
-                "total_executions": self.execution_engine.execution_stats["total_executions"]
+            "tools": tools,
+            "total_found": len(tools),
+            "query": query,
+            "filters": filters
+        }
+    
+    async def _handle_select_optimal_tool(self, parameters: Dict) -> Dict:
+        """處理最優工具選擇請求"""
+        requirement = parameters.get("requirement", "")
+        context = parameters.get("context", {})
+        
+        result = self.routing_engine.select_optimal_tool(requirement, context)
+        return result
+    
+    async def _handle_register_tool(self, parameters: Dict) -> Dict:
+        """處理工具註冊請求"""
+        tool_info = parameters.get("tool_info", {})
+        
+        if not tool_info:
+            return {
+                "success": False,
+                "error": "Missing tool_info parameter"
             }
-        }
-
-
-class ReleaseDiscoveryEngine:
-    """發布發現引擎 - 整合到統一智能工具引擎"""
-    
-    def __init__(self, registry: UnifiedToolRegistry):
-        self.registry = registry
-        self.workflow_state = {
-            "current_phase": "idle",
-            "context_cache": {},
-            "discovery_results": [],
-            "release_status": "pending"
-        }
         
-        # 工具註冊表 - 發布發現相關工具
-        self.release_tools = {
-            "discover_tools": {
-                "name": "工具發現",
-                "description": "執行智能工具發現工作流",
-                "category": "discovery",
-                "parameters": ["context", "requirements", "filters"]
-            },
-            "release_workflow": {
-                "name": "發布工作流",
-                "description": "執行完整的發布管理工作流",
-                "category": "release",
-                "parameters": ["version", "release_context", "rules", "target"]
-            },
-            "analyze_context": {
-                "name": "上下文分析",
-                "description": "深度分析項目上下文和依賴關係",
-                "category": "analysis",
-                "parameters": ["text", "context_id", "analysis_depth"]
-            },
-            "validate_tools": {
-                "name": "工具驗證",
-                "description": "驗證工具質量和可用性",
-                "category": "validation",
-                "parameters": ["tools", "validation_criteria", "quality_threshold"]
-            },
-            "quality_assessment": {
-                "name": "質量評估",
-                "description": "評估發布質量和準備度",
-                "category": "quality",
-                "parameters": ["version", "context", "quality_gates"]
-            },
-            "deployment_validation": {
-                "name": "部署驗證",
-                "description": "驗證部署準備和環境配置",
-                "category": "deployment",
-                "parameters": ["target", "configuration", "prerequisites"]
-            }
-        }
-        
-        logger.info("發布發現引擎初始化完成")
-    
-    def execute_discovery_workflow(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        執行工具發現工作流
-        MCPBrainstorm → InfiniteContext → MCP.so → ACI.dev → 自動部署
-        """
-        self.workflow_state["current_phase"] = "discovery"
-        
-        try:
-            # 階段1: 上下文分析
-            context_data = input_data.get("context", "")
-            context_result = self._analyze_discovery_context(context_data)
-            
-            # 階段2: 工具發現
-            discovery_result = self._discover_tools_from_registry(context_result, input_data)
-            
-            # 階段3: 質量分析
-            quality_result = self._analyze_tool_quality(discovery_result.get("tools", []))
-            
-            # 階段4: 部署驗證
-            deployment_result = self._validate_deployment_readiness(quality_result)
-            
-            # 彙總結果
-            workflow_result = {
-                "status": "success",
-                "workflow": "discovery",
-                "phases": {
-                    "context_analysis": context_result,
-                    "tool_discovery": discovery_result,
-                    "quality_analysis": quality_result,
-                    "deployment_validation": deployment_result
-                },
-                "summary": {
-                    "tools_discovered": len(discovery_result.get("tools", [])),
-                    "quality_score": quality_result.get("score", 0),
-                    "deployment_ready": deployment_result.get("ready", False)
-                },
-                "timestamp": datetime.now().isoformat()
-            }
-            
-            self.workflow_state["discovery_results"].append(workflow_result)
-            self.workflow_state["current_phase"] = "completed"
-            
-            return workflow_result
-            
-        except Exception as e:
-            logger.error(f"工具發現工作流執行失敗: {e}")
-            return {"status": "error", "message": str(e)}
-    
-    def execute_release_workflow(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        執行發布工作流
-        上下文分析 → 質量評估 → 規則執行 → 發布驗證
-        """
-        self.workflow_state["current_phase"] = "release"
-        
-        try:
-            # 階段1: 上下文分析
-            release_context = input_data.get("release_context", {})
-            context_analysis = self._analyze_release_context(release_context)
-            
-            # 階段2: 質量評估
-            quality_assessment = self._assess_release_quality(
-                context_analysis, 
-                input_data.get("version", "1.0.0")
-            )
-            
-            # 階段3: 規則執行
-            rule_execution = self._execute_release_rules(
-                quality_assessment, 
-                input_data.get("rules", [])
-            )
-            
-            # 階段4: 發布驗證
-            release_validation = self._validate_release_readiness(
-                rule_execution, 
-                input_data.get("target", "production")
-            )
-            
-            # 彙總結果
-            release_result = {
-                "status": "success",
-                "workflow": "release",
-                "version": input_data.get("version", "1.0.0"),
-                "phases": {
-                    "context_analysis": context_analysis,
-                    "quality_assessment": quality_assessment,
-                    "rule_execution": rule_execution,
-                    "release_validation": release_validation
-                },
-                "summary": {
-                    "quality_passed": quality_assessment.get("passed", False),
-                    "rules_satisfied": rule_execution.get("satisfied", False),
-                    "release_approved": release_validation.get("approved", False)
-                },
-                "timestamp": datetime.now().isoformat()
-            }
-            
-            self.workflow_state["release_status"] = "completed"
-            
-            return release_result
-            
-        except Exception as e:
-            logger.error(f"發布工作流執行失敗: {e}")
-            return {"status": "error", "message": str(e)}
-    
-    def _analyze_discovery_context(self, context_data: str) -> Dict[str, Any]:
-        """分析發現上下文"""
-        return {
-            "context_length": len(context_data),
-            "key_concepts": self._extract_key_concepts(context_data),
-            "requirements": self._extract_requirements(context_data),
-            "complexity_score": min(len(context_data) / 1000, 1.0),
-            "analysis_timestamp": datetime.now().isoformat()
-        }
-    
-    def _discover_tools_from_registry(self, context_result: Dict, input_data: Dict) -> Dict[str, Any]:
-        """從註冊表發現工具"""
-        requirements = input_data.get("requirements", [])
-        search_query = " ".join(requirements) if requirements else context_result.get("key_concepts", ["general"])[0]
-        
-        # 使用統一工具註冊表搜索
-        discovered_tools = self.registry.search_tools(search_query)
+        tool_id = self.registry.register_tool(tool_info)
         
         return {
-            "tools": discovered_tools[:10],  # 限制返回前10個工具
-            "search_query": search_query,
-            "total_found": len(discovered_tools),
-            "discovery_method": "registry_search"
+            "success": True,
+            "tool_id": tool_id,
+            "message": f"Tool {tool_info.get('name')} registered successfully"
         }
     
-    def _analyze_tool_quality(self, tools: List[Dict]) -> Dict[str, Any]:
-        """分析工具質量"""
-        if not tools:
-            return {"score": 0, "analysis": "無工具可分析"}
+    async def _handle_get_tool_stats(self, parameters: Dict) -> Dict:
+        """處理工具統計查詢請求"""
+        tool_id = parameters.get("tool_id")
         
-        total_score = 0
-        quality_details = []
-        
-        for tool in tools:
-            tool_score = (
-                tool.get("quality_scores", {}).get("user_rating", 3.0) / 5.0 * 0.4 +
-                tool.get("performance_metrics", {}).get("success_rate", 0.8) * 0.3 +
-                tool.get("quality_scores", {}).get("documentation_quality", 0.7) * 0.3
-            )
-            total_score += tool_score
-            quality_details.append({
-                "tool_name": tool.get("name", "unknown"),
-                "quality_score": tool_score,
-                "strengths": ["高用戶評分", "良好性能", "完整文檔"],
-                "weaknesses": ["需要更多測試", "社區支持有限"]
-            })
-        
-        average_score = total_score / len(tools)
-        
-        return {
-            "score": average_score,
-            "total_tools": len(tools),
-            "quality_details": quality_details,
-            "recommendation": "優秀" if average_score > 0.8 else "良好" if average_score > 0.6 else "需要改進"
-        }
-    
-    def _validate_deployment_readiness(self, quality_result: Dict) -> Dict[str, Any]:
-        """驗證部署準備度"""
-        quality_score = quality_result.get("score", 0)
-        
-        return {
-            "ready": quality_score > 0.7,
-            "quality_gate_passed": quality_score > 0.6,
-            "deployment_score": quality_score,
-            "recommendations": [
-                "執行完整測試套件",
-                "驗證環境配置",
-                "準備回滾計劃"
-            ] if quality_score > 0.7 else [
-                "提高工具質量",
-                "增加測試覆蓋率",
-                "改善文檔質量"
-            ]
-        }
-    
-    def _analyze_release_context(self, release_context: Dict) -> Dict[str, Any]:
-        """分析發布上下文"""
-        changes = release_context.get("changes", [])
-        target = release_context.get("target", "production")
-        
-        return {
-            "changes_count": len(changes),
-            "change_types": self._categorize_changes(changes),
-            "target_environment": target,
-            "risk_level": self._assess_risk_level(changes, target),
-            "impact_analysis": self._analyze_impact(changes)
-        }
-    
-    def _assess_release_quality(self, context_analysis: Dict, version: str) -> Dict[str, Any]:
-        """評估發布質量"""
-        risk_level = context_analysis.get("risk_level", "medium")
-        changes_count = context_analysis.get("changes_count", 0)
-        
-        quality_score = 0.9 if risk_level == "low" else 0.7 if risk_level == "medium" else 0.5
-        
-        return {
-            "passed": quality_score > 0.6,
-            "quality_score": quality_score,
-            "version": version,
-            "risk_assessment": risk_level,
-            "quality_gates": {
-                "code_quality": quality_score > 0.7,
-                "test_coverage": quality_score > 0.6,
-                "security_scan": quality_score > 0.8,
-                "performance_test": quality_score > 0.7
-            }
-        }
-    
-    def _execute_release_rules(self, quality_assessment: Dict, rules: List[str]) -> Dict[str, Any]:
-        """執行發布規則"""
-        satisfied_rules = []
-        failed_rules = []
-        
-        for rule in rules:
-            if self._check_rule(rule, quality_assessment):
-                satisfied_rules.append(rule)
+        if tool_id:
+            tool = self.registry.get_tool_by_id(tool_id)
+            if tool:
+                return {
+                    "success": True,
+                    "tool_stats": tool["usage_stats"],
+                    "performance_metrics": tool["performance_metrics"]
+                }
             else:
-                failed_rules.append(rule)
-        
-        return {
-            "satisfied": len(failed_rules) == 0,
-            "satisfied_rules": satisfied_rules,
-            "failed_rules": failed_rules,
-            "compliance_rate": len(satisfied_rules) / len(rules) if rules else 1.0
-        }
-    
-    def _validate_release_readiness(self, rule_execution: Dict, target: str) -> Dict[str, Any]:
-        """驗證發布準備度"""
-        rules_satisfied = rule_execution.get("satisfied", False)
-        compliance_rate = rule_execution.get("compliance_rate", 0)
-        
-        return {
-            "approved": rules_satisfied and compliance_rate > 0.8,
-            "target_environment": target,
-            "compliance_rate": compliance_rate,
-            "readiness_score": compliance_rate,
-            "approval_status": "approved" if rules_satisfied else "pending_fixes"
-        }
-    
-    def _extract_key_concepts(self, text: str) -> List[str]:
-        """提取關鍵概念"""
-        # 簡化的關鍵詞提取
-        keywords = ["data", "analysis", "visualization", "api", "automation", "workflow"]
-        found_concepts = [kw for kw in keywords if kw.lower() in text.lower()]
-        return found_concepts[:5] if found_concepts else ["general"]
-    
-    def _extract_requirements(self, text: str) -> List[str]:
-        """提取需求"""
-        # 簡化的需求提取
-        requirements = []
-        if "python" in text.lower():
-            requirements.append("python")
-        if "data" in text.lower():
-            requirements.append("data_processing")
-        if "api" in text.lower():
-            requirements.append("api_integration")
-        return requirements if requirements else ["general"]
-    
-    def _categorize_changes(self, changes: List[str]) -> Dict[str, int]:
-        """分類變更"""
-        categories = {"feature": 0, "bugfix": 0, "security": 0, "performance": 0}
-        
-        for change in changes:
-            change_lower = change.lower()
-            if "新增" in change_lower or "feature" in change_lower:
-                categories["feature"] += 1
-            elif "修復" in change_lower or "fix" in change_lower:
-                categories["bugfix"] += 1
-            elif "安全" in change_lower or "security" in change_lower:
-                categories["security"] += 1
-            elif "性能" in change_lower or "performance" in change_lower:
-                categories["performance"] += 1
-        
-        return categories
-    
-    def _assess_risk_level(self, changes: List[str], target: str) -> str:
-        """評估風險等級"""
-        if target == "production" and len(changes) > 5:
-            return "high"
-        elif len(changes) > 3:
-            return "medium"
+                return {
+                    "success": False,
+                    "error": f"Tool {tool_id} not found"
+                }
         else:
-            return "low"
+            # 返回總體統計
+            total_tools = len(self.registry.tools_db)
+            total_calls = sum(tool["usage_stats"]["total_calls"] for tool in self.registry.tools_db.values())
+            total_cost = sum(tool["usage_stats"]["total_cost"] for tool in self.registry.tools_db.values())
+            
+            return {
+                "success": True,
+                "overall_stats": {
+                    "total_tools": total_tools,
+                    "total_calls": total_calls,
+                    "total_cost": total_cost,
+                    "cost_tracker": {
+                        "monthly_cost": self.registry.cost_tracker.get_monthly_cost(),
+                        "daily_costs": self.registry.cost_tracker.daily_costs,
+                        "tool_costs": self.registry.cost_tracker.tool_costs
+                    }
+                }
+            }
     
-    def _analyze_impact(self, changes: List[str]) -> Dict[str, Any]:
-        """分析影響"""
+    async def _handle_update_tool_stats(self, parameters: Dict) -> Dict:
+        """處理工具統計更新請求"""
+        tool_id = parameters.get("tool_id")
+        execution_result = parameters.get("execution_result", {})
+        
+        if not tool_id or not execution_result:
+            return {
+                "success": False,
+                "error": "Missing tool_id or execution_result parameter"
+            }
+        
+        self.registry.update_tool_stats(tool_id, execution_result)
+        
         return {
-            "user_impact": "medium" if len(changes) > 3 else "low",
-            "system_impact": "high" if any("架構" in change for change in changes) else "medium",
-            "rollback_complexity": "high" if len(changes) > 5 else "medium"
+            "success": True,
+            "message": f"Stats updated for tool {tool_id}"
         }
-    
-    def _check_rule(self, rule: str, quality_assessment: Dict) -> bool:
-        """檢查規則"""
-        quality_gates = quality_assessment.get("quality_gates", {})
-        
-        rule_mapping = {
-            "quality_gate": quality_gates.get("code_quality", False),
-            "security_scan": quality_gates.get("security_scan", False),
-            "performance_test": quality_gates.get("performance_test", False),
-            "test_coverage": quality_gates.get("test_coverage", False)
-        }
-        
-        return rule_mapping.get(rule, True)  # 默認通過未知規則
-    
-    def get_workflow_state(self) -> Dict[str, Any]:
-        """獲取工作流狀態"""
-        return self.workflow_state.copy()
-    
-    def reset_workflow(self) -> Dict[str, Any]:
-        """重置工作流狀態"""
-        self.workflow_state = {
-            "current_phase": "idle",
-            "context_cache": {},
-            "discovery_results": [],
-            "release_status": "pending"
-        }
-        
-        return {"status": "success", "message": "工作流狀態已重置"}
-    
-    def get_release_tools(self) -> Dict[str, Any]:
-        """獲取發布相關工具"""
-        return self.release_tools
+
+# 導出主要類
+__all__ = [
+    'SmartToolEngineMCP',
+    'UnifiedToolRegistry', 
+    'IntelligentRoutingEngine',
+    'CloudPlatformIntegration',
+    'CostTracker',
+    'PlatformType',
+    'CostType'
+]
 
