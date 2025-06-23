@@ -1,176 +1,175 @@
-import * as vscode from 'vscode';
-import { AuthenticationService, AuthProvider } from '../services/AuthenticationService';
-
-export class AuthProvider implements vscode.WebviewViewProvider {
-    public static readonly viewType = 'powerautomation.auth';
-    private _view?: vscode.WebviewView;
-
-    constructor(
-        private readonly _extensionUri: vscode.Uri,
-        private readonly _authService: AuthenticationService
-    ) {}
-
-    public resolveWebviewView(
-        webviewView: vscode.WebviewView,
-        context: vscode.WebviewViewResolveContext,
-        _token: vscode.CancellationToken,
-    ) {
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.AuthProvider = void 0;
+const vscode = __importStar(require("vscode"));
+class AuthProvider {
+    constructor(_extensionUri, _authService) {
+        this._extensionUri = _extensionUri;
+        this._authService = _authService;
+    }
+    resolveWebviewView(webviewView, context, _token) {
         this._view = webviewView;
-
         webviewView.webview.options = {
             enableScripts: true,
             localResourceRoots: [this._extensionUri]
         };
-
         webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
-
         // 處理來自webview的消息
-        webviewView.webview.onDidReceiveMessage(
-            async message => {
-                switch (message.type) {
-                    case 'login':
-                        await this._handleLogin(message.provider, message.credentials);
-                        break;
-                    case 'register':
-                        await this._handleRegister(message.provider, message.userData);
-                        break;
-                    case 'logout':
-                        await this._handleLogout();
-                        break;
-                    case 'sendVerificationCode':
-                        await this._handleSendVerificationCode(message.phone);
-                        break;
-                    case 'resetPassword':
-                        await this._handleResetPassword(message.email);
-                        break;
-                    case 'switchMode':
-                        this._switchAuthMode(message.mode);
-                        break;
-                }
-            },
-            undefined,
-            []
-        );
+        webviewView.webview.onDidReceiveMessage(async (message) => {
+            switch (message.type) {
+                case 'login':
+                    await this._handleLogin(message.provider, message.credentials);
+                    break;
+                case 'register':
+                    await this._handleRegister(message.provider, message.userData);
+                    break;
+                case 'logout':
+                    await this._handleLogout();
+                    break;
+                case 'sendVerificationCode':
+                    await this._handleSendVerificationCode(message.phone);
+                    break;
+                case 'resetPassword':
+                    await this._handleResetPassword(message.email);
+                    break;
+                case 'switchMode':
+                    this._switchAuthMode(message.mode);
+                    break;
+            }
+        }, undefined, []);
     }
-
-    public refresh() {
+    refresh() {
         if (this._view) {
             this._view.webview.html = this._getHtmlForWebview(this._view.webview);
         }
     }
-
-    private async _handleLogin(provider: string, credentials: any) {
-        if (!this._view) return;
-
+    async _handleLogin(provider, credentials) {
+        if (!this._view)
+            return;
         try {
             this._view.webview.postMessage({ type: 'loginStart' });
-            
             const user = await this._authService.login(provider, credentials);
-            
-            this._view.webview.postMessage({ 
-                type: 'loginSuccess', 
-                user: user 
+            this._view.webview.postMessage({
+                type: 'loginSuccess',
+                user: user
             });
-
             vscode.window.showInformationMessage(`歡迎回來，${user.username}！`);
             this.refresh();
-        } catch (error) {
-            this._view.webview.postMessage({ 
-                type: 'loginError', 
-                error: error.toString() 
+        }
+        catch (error) {
+            this._view.webview.postMessage({
+                type: 'loginError',
+                error: error.toString()
             });
         }
     }
-
-    private async _handleRegister(provider: string, userData: any) {
-        if (!this._view) return;
-
+    async _handleRegister(provider, userData) {
+        if (!this._view)
+            return;
         try {
             this._view.webview.postMessage({ type: 'registerStart' });
-            
             const user = await this._authService.register(provider, userData);
-            
-            this._view.webview.postMessage({ 
-                type: 'registerSuccess', 
-                user: user 
+            this._view.webview.postMessage({
+                type: 'registerSuccess',
+                user: user
             });
-
             vscode.window.showInformationMessage(`註冊成功！歡迎，${user.username}！`);
             this.refresh();
-        } catch (error) {
-            this._view.webview.postMessage({ 
-                type: 'registerError', 
-                error: error.toString() 
+        }
+        catch (error) {
+            this._view.webview.postMessage({
+                type: 'registerError',
+                error: error.toString()
             });
         }
     }
-
-    private async _handleLogout() {
+    async _handleLogout() {
         try {
             await this._authService.logout();
             vscode.window.showInformationMessage('已成功登出');
             this.refresh();
-        } catch (error) {
+        }
+        catch (error) {
             vscode.window.showErrorMessage(`登出失敗: ${error}`);
         }
     }
-
-    private async _handleSendVerificationCode(phone: string) {
-        if (!this._view) return;
-
+    async _handleSendVerificationCode(phone) {
+        if (!this._view)
+            return;
         try {
             await this._authService.sendPhoneVerificationCode(phone);
-            this._view.webview.postMessage({ 
+            this._view.webview.postMessage({
                 type: 'verificationCodeSent',
                 phone: phone
             });
-        } catch (error) {
-            this._view.webview.postMessage({ 
-                type: 'verificationCodeError', 
-                error: error.toString() 
+        }
+        catch (error) {
+            this._view.webview.postMessage({
+                type: 'verificationCodeError',
+                error: error.toString()
             });
         }
     }
-
-    private async _handleResetPassword(email: string) {
-        if (!this._view) return;
-
+    async _handleResetPassword(email) {
+        if (!this._view)
+            return;
         try {
             await this._authService.resetPassword(email);
-            this._view.webview.postMessage({ 
+            this._view.webview.postMessage({
                 type: 'passwordResetSent',
                 email: email
             });
-        } catch (error) {
-            this._view.webview.postMessage({ 
-                type: 'passwordResetError', 
-                error: error.toString() 
+        }
+        catch (error) {
+            this._view.webview.postMessage({
+                type: 'passwordResetError',
+                error: error.toString()
             });
         }
     }
-
-    private _switchAuthMode(mode: 'login' | 'register') {
+    _switchAuthMode(mode) {
         if (this._view) {
-            this._view.webview.postMessage({ 
-                type: 'switchMode', 
-                mode: mode 
+            this._view.webview.postMessage({
+                type: 'switchMode',
+                mode: mode
             });
         }
     }
-
-    private _getHtmlForWebview(webview: vscode.Webview): string {
+    _getHtmlForWebview(webview) {
         const isAuthenticated = this._authService.isAuthenticated();
         const currentUser = this._authService.getCurrentUser();
         const authProviders = this._authService.getAuthProviders();
-
         if (isAuthenticated && currentUser) {
             return this._getAuthenticatedView(currentUser);
-        } else {
+        }
+        else {
             return this._getLoginView(authProviders);
         }
     }
-
-    private _getAuthenticatedView(user: any): string {
+    _getAuthenticatedView(user) {
         return `<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -395,8 +394,7 @@ export class AuthProvider implements vscode.WebviewViewProvider {
 </body>
 </html>`;
     }
-
-    private _getLoginView(authProviders: AuthProvider[]): string {
+    _getLoginView(authProviders) {
         return `<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -1149,8 +1147,7 @@ export class AuthProvider implements vscode.WebviewViewProvider {
 </body>
 </html>`;
     }
-
-    private _getProviderIcon(provider: string): string {
+    _getProviderIcon(provider) {
         const icons = {
             'email': '📧',
             'github': '🐙',
@@ -1161,8 +1158,7 @@ export class AuthProvider implements vscode.WebviewViewProvider {
         };
         return icons[provider] || '🔐';
     }
-
-    private _getProviderName(provider: string): string {
+    _getProviderName(provider) {
         const names = {
             'email': '郵箱',
             'github': 'GitHub',
@@ -1174,4 +1170,6 @@ export class AuthProvider implements vscode.WebviewViewProvider {
         return names[provider] || provider;
     }
 }
-
+exports.AuthProvider = AuthProvider;
+AuthProvider.viewType = 'powerautomation.auth';
+//# sourceMappingURL=AuthProvider.js.map

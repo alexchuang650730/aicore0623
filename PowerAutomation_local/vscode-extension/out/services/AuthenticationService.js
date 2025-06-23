@@ -1,80 +1,83 @@
-import * as vscode from 'vscode';
-
-export interface UserProfile {
-    id: string;
-    username: string;
-    email: string;
-    avatar?: string;
-    provider: 'email' | 'github' | 'google' | 'microsoft' | 'phone' | 'apikey';
-    subscription: 'free' | 'pro' | 'enterprise';
-    credits: number;
-    lastLogin: Date;
-}
-
-export interface AuthProvider {
-    id: string;
-    name: string;
-    icon: string;
-    color: string;
-    description: string;
-}
-
-export class AuthenticationService {
-    private _currentUser: UserProfile | null = null;
-    private _isAuthenticated: boolean = false;
-    private _authProviders: AuthProvider[] = [
-        {
-            id: 'email',
-            name: '郵箱登錄',
-            icon: '📧',
-            color: '#4285f4',
-            description: '使用郵箱和密碼登錄'
-        },
-        {
-            id: 'github',
-            name: 'GitHub',
-            icon: '🐙',
-            color: '#24292e',
-            description: '使用GitHub帳號登錄'
-        },
-        {
-            id: 'google',
-            name: 'Google',
-            icon: '🔍',
-            color: '#db4437',
-            description: '使用Google帳號登錄'
-        },
-        {
-            id: 'microsoft',
-            name: 'Microsoft',
-            icon: '🪟',
-            color: '#00a1f1',
-            description: '使用Microsoft帳號登錄'
-        },
-        {
-            id: 'phone',
-            name: '手機號',
-            icon: '📱',
-            color: '#25d366',
-            description: '使用手機號和驗證碼登錄'
-        },
-        {
-            id: 'apikey',
-            name: 'API Key',
-            icon: '🔑',
-            color: '#ff6b35',
-            description: '使用API密鑰登錄（開發者）'
-        }
-    ];
-
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.AuthenticationService = void 0;
+const vscode = __importStar(require("vscode"));
+class AuthenticationService {
     constructor() {
+        this._currentUser = null;
+        this._isAuthenticated = false;
+        this._authProviders = [
+            {
+                id: 'email',
+                name: '郵箱登錄',
+                icon: '📧',
+                color: '#4285f4',
+                description: '使用郵箱和密碼登錄'
+            },
+            {
+                id: 'github',
+                name: 'GitHub',
+                icon: '🐙',
+                color: '#24292e',
+                description: '使用GitHub帳號登錄'
+            },
+            {
+                id: 'google',
+                name: 'Google',
+                icon: '🔍',
+                color: '#db4437',
+                description: '使用Google帳號登錄'
+            },
+            {
+                id: 'microsoft',
+                name: 'Microsoft',
+                icon: '🪟',
+                color: '#00a1f1',
+                description: '使用Microsoft帳號登錄'
+            },
+            {
+                id: 'phone',
+                name: '手機號',
+                icon: '📱',
+                color: '#25d366',
+                description: '使用手機號和驗證碼登錄'
+            },
+            {
+                id: 'apikey',
+                name: 'API Key',
+                icon: '🔑',
+                color: '#ff6b35',
+                description: '使用API密鑰登錄（開發者）'
+            }
+        ];
         this._loadStoredAuth();
     }
-
-    public async login(provider: string, credentials: any): Promise<UserProfile> {
+    async login(provider, credentials) {
         try {
-            let user: UserProfile;
-
+            let user;
             switch (provider) {
                 case 'email':
                     user = await this._loginWithEmail(credentials.email, credentials.password);
@@ -97,22 +100,19 @@ export class AuthenticationService {
                 default:
                     throw new Error('不支持的登錄方式');
             }
-
             this._currentUser = user;
             this._isAuthenticated = true;
             this._saveAuth();
-
             vscode.commands.executeCommand('setContext', 'powerautomation.authenticated', true);
             return user;
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error(`登錄失敗: ${error}`);
         }
     }
-
-    public async register(provider: string, userData: any): Promise<UserProfile> {
+    async register(provider, userData) {
         try {
-            let user: UserProfile;
-
+            let user;
             switch (provider) {
                 case 'email':
                     user = await this._registerWithEmail(userData);
@@ -132,41 +132,34 @@ export class AuthenticationService {
                 default:
                     throw new Error('不支持的註冊方式');
             }
-
             this._currentUser = user;
             this._isAuthenticated = true;
             this._saveAuth();
-
             vscode.commands.executeCommand('setContext', 'powerautomation.authenticated', true);
             return user;
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error(`註冊失敗: ${error}`);
         }
     }
-
-    public async logout(): Promise<void> {
+    async logout() {
         this._currentUser = null;
         this._isAuthenticated = false;
         this._clearStoredAuth();
         vscode.commands.executeCommand('setContext', 'powerautomation.authenticated', false);
     }
-
-    public getCurrentUser(): UserProfile | null {
+    getCurrentUser() {
         return this._currentUser;
     }
-
-    public isAuthenticated(): boolean {
+    isAuthenticated() {
         return this._isAuthenticated;
     }
-
-    public getAuthProviders(): AuthProvider[] {
+    getAuthProviders() {
         return this._authProviders;
     }
-
-    private async _loginWithEmail(email: string, password: string): Promise<UserProfile> {
+    async _loginWithEmail(email, password) {
         // 模擬API調用
         await this._delay(1000);
-        
         if (email === 'demo@powerautomation.ai' && password === 'demo123') {
             return {
                 id: 'user_001',
@@ -179,14 +172,11 @@ export class AuthenticationService {
                 lastLogin: new Date()
             };
         }
-        
         throw new Error('郵箱或密碼錯誤');
     }
-
-    private async _loginWithGitHub(): Promise<UserProfile> {
+    async _loginWithGitHub() {
         // 使用VSCode的GitHub認證
         const session = await vscode.authentication.getSession('github', ['user:email'], { createIfNone: true });
-        
         return {
             id: `github_${session.account.id}`,
             username: session.account.label,
@@ -198,11 +188,9 @@ export class AuthenticationService {
             lastLogin: new Date()
         };
     }
-
-    private async _loginWithGoogle(): Promise<UserProfile> {
+    async _loginWithGoogle() {
         // 模擬Google OAuth流程
         await this._delay(1500);
-        
         return {
             id: 'google_demo',
             username: 'Google User',
@@ -214,12 +202,10 @@ export class AuthenticationService {
             lastLogin: new Date()
         };
     }
-
-    private async _loginWithMicrosoft(): Promise<UserProfile> {
+    async _loginWithMicrosoft() {
         // 使用VSCode的Microsoft認證
         try {
             const session = await vscode.authentication.getSession('microsoft', ['user.read'], { createIfNone: true });
-            
             return {
                 id: `microsoft_${session.account.id}`,
                 username: session.account.label,
@@ -230,15 +216,14 @@ export class AuthenticationService {
                 credits: 100,
                 lastLogin: new Date()
             };
-        } catch (error) {
+        }
+        catch (error) {
             throw new Error('Microsoft登錄失敗');
         }
     }
-
-    private async _loginWithPhone(phone: string, code: string): Promise<UserProfile> {
+    async _loginWithPhone(phone, code) {
         // 模擬手機驗證
         await this._delay(800);
-        
         if (code === '123456') {
             return {
                 id: `phone_${phone}`,
@@ -250,14 +235,11 @@ export class AuthenticationService {
                 lastLogin: new Date()
             };
         }
-        
         throw new Error('驗證碼錯誤');
     }
-
-    private async _loginWithApiKey(apiKey: string): Promise<UserProfile> {
+    async _loginWithApiKey(apiKey) {
         // 模擬API Key驗證
         await this._delay(500);
-        
         if (apiKey.startsWith('pa_') && apiKey.length === 32) {
             return {
                 id: `api_${apiKey.slice(-8)}`,
@@ -269,13 +251,10 @@ export class AuthenticationService {
                 lastLogin: new Date()
             };
         }
-        
         throw new Error('無效的API Key');
     }
-
-    private async _registerWithEmail(userData: any): Promise<UserProfile> {
+    async _registerWithEmail(userData) {
         await this._delay(1200);
-        
         return {
             id: `user_${Date.now()}`,
             username: userData.username,
@@ -286,22 +265,17 @@ export class AuthenticationService {
             lastLogin: new Date()
         };
     }
-
-    private async _registerWithGitHub(): Promise<UserProfile> {
+    async _registerWithGitHub() {
         return this._loginWithGitHub();
     }
-
-    private async _registerWithGoogle(): Promise<UserProfile> {
+    async _registerWithGoogle() {
         return this._loginWithGoogle();
     }
-
-    private async _registerWithMicrosoft(): Promise<UserProfile> {
+    async _registerWithMicrosoft() {
         return this._loginWithMicrosoft();
     }
-
-    private async _registerWithPhone(userData: any): Promise<UserProfile> {
+    async _registerWithPhone(userData) {
         await this._delay(1000);
-        
         return {
             id: `phone_${userData.phone}`,
             username: userData.username || `用戶${userData.phone.slice(-4)}`,
@@ -312,79 +286,70 @@ export class AuthenticationService {
             lastLogin: new Date()
         };
     }
-
-    private _loadStoredAuth(): void {
+    _loadStoredAuth() {
         try {
             const stored = vscode.workspace.getConfiguration('powerautomation').get('storedAuth');
             if (stored) {
-                const authData = JSON.parse(stored as string);
+                const authData = JSON.parse(stored);
                 this._currentUser = authData.user;
                 this._isAuthenticated = authData.authenticated;
-                
                 if (this._isAuthenticated) {
                     vscode.commands.executeCommand('setContext', 'powerautomation.authenticated', true);
                 }
             }
-        } catch (error) {
+        }
+        catch (error) {
             console.error('Failed to load stored auth:', error);
         }
     }
-
-    private _saveAuth(): void {
+    _saveAuth() {
         try {
             const authData = {
                 user: this._currentUser,
                 authenticated: this._isAuthenticated,
                 timestamp: new Date().toISOString()
             };
-            
             vscode.workspace.getConfiguration('powerautomation')
                 .update('storedAuth', JSON.stringify(authData), vscode.ConfigurationTarget.Global);
-        } catch (error) {
+        }
+        catch (error) {
             console.error('Failed to save auth:', error);
         }
     }
-
-    private _clearStoredAuth(): void {
+    _clearStoredAuth() {
         try {
             vscode.workspace.getConfiguration('powerautomation')
                 .update('storedAuth', undefined, vscode.ConfigurationTarget.Global);
-        } catch (error) {
+        }
+        catch (error) {
             console.error('Failed to clear stored auth:', error);
         }
     }
-
-    private _delay(ms: number): Promise<void> {
+    _delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
-
-    public async sendPhoneVerificationCode(phone: string): Promise<void> {
+    async sendPhoneVerificationCode(phone) {
         // 模擬發送驗證碼
         await this._delay(500);
         console.log(`驗證碼已發送到 ${phone}`);
     }
-
-    public async resetPassword(email: string): Promise<void> {
+    async resetPassword(email) {
         // 模擬重置密碼
         await this._delay(800);
         console.log(`密碼重置郵件已發送到 ${email}`);
     }
-
-    public async updateProfile(updates: Partial<UserProfile>): Promise<UserProfile> {
+    async updateProfile(updates) {
         if (!this._currentUser) {
             throw new Error('用戶未登錄');
         }
-
         this._currentUser = { ...this._currentUser, ...updates };
         this._saveAuth();
         return this._currentUser;
     }
-
-    public async getSubscriptionInfo(): Promise<any> {
+    async getSubscriptionInfo() {
         if (!this._currentUser) {
             throw new Error('用戶未登錄');
         }
-
         return {
             plan: this._currentUser.subscription,
             credits: this._currentUser.credits,
@@ -392,8 +357,7 @@ export class AuthenticationService {
             nextBilling: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
         };
     }
-
-    private _getSubscriptionFeatures(plan: string): string[] {
+    _getSubscriptionFeatures(plan) {
         switch (plan) {
             case 'free':
                 return ['基礎OCR', '100積分/月', '社區支持'];
@@ -406,4 +370,5 @@ export class AuthenticationService {
         }
     }
 }
-
+exports.AuthenticationService = AuthenticationService;
+//# sourceMappingURL=AuthenticationService.js.map

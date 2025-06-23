@@ -1,25 +1,17 @@
-import * as vscode from 'vscode';
-
-export class ChatProvider implements vscode.WebviewViewProvider {
-    public static readonly viewType = 'powerautomation.chatView';
-    private _view?: vscode.WebviewView;
-
-    constructor(private readonly _extensionUri: vscode.Uri) {}
-
-    public resolveWebviewView(
-        webviewView: vscode.WebviewView,
-        context: vscode.WebviewViewResolveContext,
-        _token: vscode.CancellationToken,
-    ) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ChatProvider = void 0;
+class ChatProvider {
+    constructor(_extensionUri) {
+        this._extensionUri = _extensionUri;
+    }
+    resolveWebviewView(webviewView, context, _token) {
         this._view = webviewView;
-
         webviewView.webview.options = {
             enableScripts: true,
             localResourceRoots: [this._extensionUri]
         };
-
         webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
-
         webviewView.webview.onDidReceiveMessage(data => {
             switch (data.type) {
                 case 'sendMessage':
@@ -28,8 +20,7 @@ export class ChatProvider implements vscode.WebviewViewProvider {
             }
         });
     }
-
-    private async handleMessage(message: string) {
+    async handleMessage(message) {
         // 處理AI對話邏輯
         const response = await this.getAIResponse(message);
         this._view?.webview.postMessage({
@@ -38,18 +29,17 @@ export class ChatProvider implements vscode.WebviewViewProvider {
             isUser: false
         });
     }
-
-    private async getAIResponse(message: string): Promise<string> {
+    async getAIResponse(message) {
         // 這裡會連接到雲側smartinvention MCP服務
         try {
             // 模擬AI響應
             return `AI回應: ${message}`;
-        } catch (error) {
+        }
+        catch (error) {
             return '抱歉，AI服務暫時不可用。';
         }
     }
-
-    private _getHtmlForWebview(webview: vscode.Webview) {
+    _getHtmlForWebview(webview) {
         return `<!DOCTYPE html>
         <html lang="en">
         <head>
@@ -178,4 +168,6 @@ export class ChatProvider implements vscode.WebviewViewProvider {
         </html>`;
     }
 }
-
+exports.ChatProvider = ChatProvider;
+ChatProvider.viewType = 'powerautomation.chatView';
+//# sourceMappingURL=ChatProvider.js.map

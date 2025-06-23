@@ -1,69 +1,74 @@
-import * as vscode from 'vscode';
-import { MCPServerManager } from '../services/MCPServerManager';
-
-export class DashboardProvider implements vscode.WebviewViewProvider {
-    public static readonly viewType = 'powerautomation.dashboard';
-    private _view?: vscode.WebviewView;
-
-    constructor(
-        private readonly _extensionUri: vscode.Uri,
-        private readonly _mcpServerManager: MCPServerManager
-    ) {}
-
-    public resolveWebviewView(
-        webviewView: vscode.WebviewView,
-        context: vscode.WebviewViewResolveContext,
-        _token: vscode.CancellationToken,
-    ) {
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.DashboardProvider = void 0;
+const vscode = __importStar(require("vscode"));
+class DashboardProvider {
+    constructor(_extensionUri, _mcpServerManager) {
+        this._extensionUri = _extensionUri;
+        this._mcpServerManager = _mcpServerManager;
+    }
+    resolveWebviewView(webviewView, context, _token) {
         this._view = webviewView;
-
         webviewView.webview.options = {
             enableScripts: true,
             localResourceRoots: [this._extensionUri]
         };
-
         webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
-
         // 處理來自webview的消息
-        webviewView.webview.onDidReceiveMessage(
-            message => {
-                switch (message.type) {
-                    case 'startMCPServer':
-                        vscode.commands.executeCommand('powerautomation.startMCPServer');
-                        break;
-                    case 'stopMCPServer':
-                        vscode.commands.executeCommand('powerautomation.stopMCPServer');
-                        break;
-                    case 'runTests':
-                        vscode.commands.executeCommand('powerautomation.runTests');
-                        break;
-                    case 'toggleMode':
-                        vscode.commands.executeCommand('powerautomation.toggleMode');
-                        break;
-                }
-            },
-            undefined,
-            []
-        );
+        webviewView.webview.onDidReceiveMessage(message => {
+            switch (message.type) {
+                case 'startMCPServer':
+                    vscode.commands.executeCommand('powerautomation.startMCPServer');
+                    break;
+                case 'stopMCPServer':
+                    vscode.commands.executeCommand('powerautomation.stopMCPServer');
+                    break;
+                case 'runTests':
+                    vscode.commands.executeCommand('powerautomation.runTests');
+                    break;
+                case 'toggleMode':
+                    vscode.commands.executeCommand('powerautomation.toggleMode');
+                    break;
+            }
+        }, undefined, []);
     }
-
-    public show() {
+    show() {
         if (this._view) {
             this._view.show?.(true);
         }
     }
-
-    public refresh() {
+    refresh() {
         if (this._view) {
             this._view.webview.html = this._getHtmlForWebview(this._view.webview);
         }
     }
-
-    private _getHtmlForWebview(webview: vscode.Webview): string {
+    _getHtmlForWebview(webview) {
         const config = vscode.workspace.getConfiguration('powerautomation');
         const isMinimalMode = config.get('minimalMode', false);
         const serverStatus = this._mcpServerManager.isRunning() ? 'running' : 'stopped';
-
         return `<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -349,4 +354,6 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
 </html>`;
     }
 }
-
+exports.DashboardProvider = DashboardProvider;
+DashboardProvider.viewType = 'powerautomation.dashboard';
+//# sourceMappingURL=DashboardProvider.js.map

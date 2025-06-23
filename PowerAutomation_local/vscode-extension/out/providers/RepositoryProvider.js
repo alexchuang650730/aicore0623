@@ -1,66 +1,74 @@
-import * as vscode from 'vscode';
-import * as path from 'path';
-
-export class RepositoryProvider implements vscode.WebviewViewProvider {
-    public static readonly viewType = 'powerautomation.repository';
-    private _view?: vscode.WebviewView;
-
-    constructor(private readonly _extensionUri: vscode.Uri) {}
-
-    public resolveWebviewView(
-        webviewView: vscode.WebviewView,
-        context: vscode.WebviewViewResolveContext,
-        _token: vscode.CancellationToken,
-    ) {
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.RepositoryProvider = void 0;
+const vscode = __importStar(require("vscode"));
+const path = __importStar(require("path"));
+class RepositoryProvider {
+    constructor(_extensionUri) {
+        this._extensionUri = _extensionUri;
+    }
+    resolveWebviewView(webviewView, context, _token) {
         this._view = webviewView;
-
         webviewView.webview.options = {
             enableScripts: true,
             localResourceRoots: [this._extensionUri]
         };
-
         webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
-
         // 處理來自webview的消息
-        webviewView.webview.onDidReceiveMessage(
-            async message => {
-                switch (message.type) {
-                    case 'selectFile':
-                        await this._selectFile(message.fileName);
-                        break;
-                    case 'analyzeFile':
-                        await this._analyzeFile(message.fileName);
-                        break;
-                    case 'openFile':
-                        await this._openFile(message.fileName);
-                        break;
-                    case 'refreshRepository':
-                        this.refresh();
-                        break;
-                }
-            },
-            undefined,
-            []
-        );
+        webviewView.webview.onDidReceiveMessage(async (message) => {
+            switch (message.type) {
+                case 'selectFile':
+                    await this._selectFile(message.fileName);
+                    break;
+                case 'analyzeFile':
+                    await this._analyzeFile(message.fileName);
+                    break;
+                case 'openFile':
+                    await this._openFile(message.fileName);
+                    break;
+                case 'refreshRepository':
+                    this.refresh();
+                    break;
+            }
+        }, undefined, []);
     }
-
-    public refresh() {
+    refresh() {
         if (this._view) {
             this._view.webview.html = this._getHtmlForWebview(this._view.webview);
         }
     }
-
-    private async _selectFile(fileName: string) {
+    async _selectFile(fileName) {
         // 通知其他視圖文件被選中
         vscode.commands.executeCommand('powerautomation.fileSelected', fileName);
     }
-
-    private async _analyzeFile(fileName: string) {
+    async _analyzeFile(fileName) {
         // 發送分析請求到Chat視圖
         vscode.commands.executeCommand('powerautomation.analyzeFile', fileName);
     }
-
-    private async _openFile(fileName: string) {
+    async _openFile(fileName) {
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (workspaceFolders && workspaceFolders.length > 0) {
             const filePath = path.join(workspaceFolders[0].uri.fsPath, fileName);
@@ -68,8 +76,7 @@ export class RepositoryProvider implements vscode.WebviewViewProvider {
             await vscode.window.showTextDocument(document);
         }
     }
-
-    private _getFileList(): any[] {
+    _getFileList() {
         // 模擬文件列表 - 實際實現中會讀取工作區文件
         return [
             {
@@ -98,19 +105,15 @@ export class RepositoryProvider implements vscode.WebviewViewProvider {
             { name: 'requirements.txt', type: 'file', icon: '📋', language: 'text' }
         ];
     }
-
-    private _getHtmlForWebview(webview: vscode.Webview): string {
+    _getHtmlForWebview(webview) {
         const config = vscode.workspace.getConfiguration('powerautomation');
         const isMinimalMode = config.get('minimalMode', false);
-
         if (isMinimalMode) {
             return `<!DOCTYPE html>
 <html><body style="display:none;"></body></html>`;
         }
-
         const fileList = this._getFileList();
         const workspaceName = vscode.workspace.workspaceFolders?.[0]?.name || 'PowerAutomation_local';
-
         return `<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -453,13 +456,11 @@ export class RepositoryProvider implements vscode.WebviewViewProvider {
 </body>
 </html>`;
     }
-
-    private _generateFileTreeHtml(files: any[], level: number = 0): string {
+    _generateFileTreeHtml(files, level = 0) {
         return files.map(file => {
             const indent = '  '.repeat(level);
             const isFile = file.type === 'file';
             const dataAttr = isFile ? `data-file="${file.name}"` : '';
-            
             let html = `
                 <div class="file-tree-item ${file.type}" ${dataAttr}
                      onclick="${isFile ? `selectFile(this, '${file.name}')` : `toggleFolder(this)`}">
@@ -473,13 +474,13 @@ export class RepositoryProvider implements vscode.WebviewViewProvider {
                     ` : ''}
                 </div>
             `;
-            
             if (file.children) {
                 html += this._generateFileTreeHtml(file.children, level + 1);
             }
-            
             return html;
         }).join('');
     }
 }
-
+exports.RepositoryProvider = RepositoryProvider;
+RepositoryProvider.viewType = 'powerautomation.repository';
+//# sourceMappingURL=RepositoryProvider.js.map
